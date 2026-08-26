@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import L from 'leaflet';
 import { Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, LayoutDashboard, Map as MapIcon, MousePointerClick } from 'lucide-react';
 import { supabase } from '../supabase';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 // Fix Leaflet default icon path issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -185,102 +185,100 @@ export default function CEOAdminPanel() {
 
   if (activeTab === 'transactions') {
     return (
-      <div className="p-6 bg-gray-50 h-full overflow-y-auto w-full absolute top-0 left-0" style={{ zIndex: 1000, backgroundColor: '#F8FAFC' }}>
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-primary-color">Financial Dashboard</h1>
-            <div className="flex gap-4">
-              <button className="btn btn-outline" onClick={() => setActiveTab('dispatch')}>
-                <MapIcon size={18} className="inline mr-2" /> Live Map
+      <div className="finance-view">
+        <div className="finance-container">
+          <div className="flex justify-between align-center mb-4">
+            <h1 style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--primary)' }}>Financial Dashboard</h1>
+            <div className="flex gap-2">
+              <button className="btn btn-outline-dark" onClick={() => setActiveTab('dispatch')}>
+                <MapIcon size={18} /> Live Map
               </button>
               <button className="btn btn-primary">
-                <LayoutDashboard size={18} className="inline mr-2" /> Finance
+                <LayoutDashboard size={18} /> Finance
               </button>
             </div>
           </div>
 
-          {/* Metrics */}
-          <div className="grid grid-cols-3 gap-6 mb-8">
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#2563EB' }}>
-              <div className="text-gray mb-1 font-semibold">Total Gross Revenue</div>
-              <div className="text-4xl font-bold text-gray-800">KES {totalEarnings}</div>
+          <div className="metric-grid">
+            <div className="metric-card" style={{ borderTop: '4px solid var(--secondary)' }}>
+              <div className="metric-label">Gross Revenue</div>
+              <div className="metric-value">KES {totalEarnings}</div>
             </div>
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#10B981' }}>
-              <div className="text-gray mb-1 font-semibold">Total Deliveries</div>
-              <div className="text-4xl font-bold text-gray-800">{totalOrders}</div>
+            <div className="metric-card" style={{ borderTop: '4px solid var(--accent)' }}>
+              <div className="metric-label">Total Deliveries</div>
+              <div className="metric-value">{totalOrders}</div>
             </div>
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#F59E0B' }}>
-              <div className="text-gray mb-1 font-semibold">Active Fleet</div>
-              <div className="text-4xl font-bold text-gray-800">{activeRiders} / 3</div>
+            <div className="metric-card" style={{ borderTop: '4px solid var(--warning-color)' }}>
+              <div className="metric-label">Active Fleet</div>
+              <div className="metric-value">{activeRiders} / 3</div>
             </div>
           </div>
 
-          {/* Charts */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="card p-6">
-              <h3 className="font-bold text-lg mb-6">Gross Revenue by Rider</h3>
+          <div className="chart-grid">
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="card-header">Gross Revenue by Rider</div>
               <div style={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
-                  <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `KES ${value}`} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="grossRevenue" fill="#2563EB" radius={[4, 4, 0, 0]} barSize={40} />
+                  <BarChart data={riderStats} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748B'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748B'}} tickFormatter={(value) => `KES ${value}`} />
+                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-lg)' }} />
+                    <Bar dataKey="grossRevenue" fill="var(--secondary)" radius={[4, 4, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="card p-6">
-              <h3 className="font-bold text-lg mb-6">Completed Orders by Rider</h3>
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="card-header">Completed Orders</div>
               <div style={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
-                  <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="orders" fill="#10B981" radius={[4, 4, 0, 0]} barSize={40} />
+                  <BarChart data={riderStats} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748B'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748B'}} />
+                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-lg)' }} />
+                    <Bar dataKey="orders" fill="var(--accent)" radius={[4, 4, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           </div>
 
-          {/* Order History */}
-          <div className="card p-6">
-            <h3 className="font-bold text-lg mb-4">Historical Transactions</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+          <div className="card">
+            <div className="card-header">Historical Transactions</div>
+            <div className="table-container">
+              <table className="data-table">
                 <thead>
-                  <tr className="border-b-2 border-gray-100 text-gray-500">
-                    <th className="p-3 font-semibold">Order #</th>
-                    <th className="p-3 font-semibold">Customer</th>
-                    <th className="p-3 font-semibold">Route</th>
-                    <th className="p-3 font-semibold">Rider</th>
-                    <th className="p-3 font-semibold">Gross Fee</th>
-                    <th className="p-3 font-semibold">Date</th>
+                  <tr>
+                    <th>Order #</th>
+                    <th>Customer</th>
+                    <th>Route</th>
+                    <th>Rider</th>
+                    <th>Fee</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.filter(o => o.status === 'delivered').map(order => (
-                    <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="p-3 font-medium text-gray-700">{order.order_number}</td>
-                      <td className="p-3">{order.customer_name}</td>
-                      <td className="p-3 text-sm text-gray-500">
-                        <div className="truncate max-w-xs">{order.pickup_address} → {order.dropoff_address}</div>
+                    <tr key={order.id}>
+                      <td className="font-bold text-muted">{order.order_number}</td>
+                      <td className="font-bold">{order.customer_name}</td>
+                      <td>
+                        <div style={{ fontSize: '0.85rem' }}>{order.pickup_address}</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>→ {order.dropoff_address}</div>
                       </td>
-                      <td className="p-3">
-                        <span className="bg-gray-100 px-3 py-1 rounded-full text-sm font-medium">
+                      <td>
+                        <span style={{ backgroundColor: '#F1F5F9', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' }}>
                           {riders[order.assigned_rider_id]?.name || 'Unknown'}
                         </span>
                       </td>
-                      <td className="p-3 font-bold text-green-600">KES {order.fee}</td>
-                      <td className="p-3 text-sm text-gray-400">{new Date(order.updated_at).toLocaleDateString()}</td>
+                      <td className="font-bold text-green">KES {order.fee}</td>
+                      <td className="text-muted" style={{ fontSize: '0.85rem' }}>{new Date(order.updated_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                   {orders.filter(o => o.status === 'delivered').length === 0 && (
-                    <tr><td colSpan="6" className="text-center p-6 text-gray-500">No transactions recorded yet.</td></tr>
+                    <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No transactions recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -292,156 +290,168 @@ export default function CEOAdminPanel() {
   }
 
   return (
-    <div className="dashboard-grid relative">
-      {/* Top Navigation Overlay */}
-      <div className="absolute top-4 right-4 z-[400] flex gap-2">
-        <button className="btn btn-primary shadow-lg" onClick={() => setActiveTab('dispatch')}>
-          <MapIcon size={18} className="inline mr-2" /> Live Map
+    <div className="dashboard-layout">
+      
+      <div className="floating-controls">
+        <button className="btn-nav active" onClick={() => setActiveTab('dispatch')}>
+          <MapIcon size={18} /> Map
         </button>
-        <button className="btn bg-white text-gray-700 shadow-lg border border-gray-200" onClick={() => setActiveTab('transactions')}>
-          <LayoutDashboard size={18} className="inline mr-2" /> Finance
+        <button className="btn-nav" onClick={() => setActiveTab('transactions')}>
+          <LayoutDashboard size={18} /> Finance
         </button>
       </div>
 
-      <div className="sidebar">
-        <div className="flex gap-4 mb-4">
-          <div className="card w-full text-center p-3">
-            <Activity className="text-gray mx-auto mb-1" size={20} />
-            <div className="text-xl font-bold">{totalOrders}</div>
-          </div>
-          <div className="card w-full text-center p-3">
-            <DollarSign className="text-gray mx-auto mb-1" size={20} />
-            <div className="text-xl font-bold text-accent-color">KES {totalEarnings}</div>
-          </div>
-        </div>
-
-        <div className="card border-t-4 border-primary-color">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Package size={20} /> Dispatch Order
-          </h2>
-          <form onSubmit={handleDispatch}>
-            <div className="form-group">
-              <label>Customer Name</label>
-              <input type="text" className="form-control" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
+      <div className="dashboard-sidebar">
+        <div className="sidebar-scrollable">
+          <div className="metric-grid">
+            <div className="metric-card">
+              <Activity className="text-muted" style={{ margin: '0 auto 4px auto' }} size={20} />
+              <div className="metric-value" style={{ fontSize: '1.25rem' }}>{totalOrders}</div>
+              <div className="metric-label">Orders</div>
             </div>
+            <div className="metric-card">
+              <DollarSign className="text-green" style={{ margin: '0 auto 4px auto' }} size={20} />
+              <div className="metric-value" style={{ fontSize: '1.25rem', color: 'var(--accent)' }}>KES {totalEarnings}</div>
+              <div className="metric-label">Revenue</div>
+            </div>
+          </div>
 
-            <div className="form-group relative">
-              <label>Pickup Location</label>
+          <div className="card" style={{ borderTop: '4px solid var(--primary)', padding: '1.25rem' }}>
+            <div className="card-header mb-4" style={{ fontSize: '1.05rem', margin: 0, paddingBottom: '1rem', borderBottom: '1px solid var(--border-light)' }}>
+              <Package size={18} /> Dispatch Order
+            </div>
+            <form onSubmit={handleDispatch}>
+              <div className="form-group">
+                <label className="form-label">Customer Name</label>
+                <input type="text" className="form-control" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Pickup Location</label>
+                <div className="input-wrapper">
+                  <input type="text" className="form-control" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
+                  <button type="button" 
+                    className={`btn-icon ${mapClickMode === 'pickup' ? 'btn-primary' : 'btn-outline-dark'}`} 
+                    onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
+                    title="Click map to set">
+                    <MousePointerClick size={18} />
+                  </button>
+                </div>
+                {mapClickMode === 'pickup' && <div className="pulse-text">Click map to set pickup...</div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Delivery Location</label>
+                <div className="input-wrapper">
+                  <input type="text" className="form-control" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
+                  <button type="button" 
+                    className={`btn-icon ${mapClickMode === 'dropoff' ? 'btn-primary' : 'btn-outline-dark'}`} 
+                    onClick={() => setMapClickMode(mapClickMode === 'dropoff' ? null : 'dropoff')}
+                    title="Click map to set">
+                    <MousePointerClick size={18} />
+                  </button>
+                </div>
+                {mapClickMode === 'dropoff' && <div className="pulse-text">Click map to set delivery...</div>}
+              </div>
+
+              <div className="flex gap-4 mb-4">
+                <div className="form-group w-full" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Phone</label>
+                  <input type="text" className="form-control" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
+                </div>
+                <div className="form-group w-full" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Fee</label>
+                  <input type="number" className="form-control" name="fee" value={formData.fee} onChange={handleInputChange} required />
+                </div>
+              </div>
+
               <div className="flex gap-2">
-                <input type="text" className="form-control flex-1" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
-                <button type="button" 
-                  className={`btn ${mapClickMode === 'pickup' ? 'btn-primary' : 'bg-gray-100 text-gray-600'}`} 
-                  onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
-                  title="Click map to set">
-                  <MousePointerClick size={18} />
+                <button type="submit" className="btn btn-primary w-full">
+                  <Send size={16} /> Dispatch
+                </button>
+                <button type="button" className="btn btn-success w-full" onClick={triggerMpesa}>
+                  <Smartphone size={16} /> 
+                  {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent!' : 'M-Pesa'}
                 </button>
               </div>
-              {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 mt-1 animate-pulse">Click anywhere on map to set pickup...</div>}
-            </div>
+            </form>
+          </div>
 
-            <div className="form-group relative">
-              <label>Delivery Location</label>
-              <div className="flex gap-2">
-                <input type="text" className="form-control flex-1" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
-                <button type="button" 
-                  className={`btn ${mapClickMode === 'dropoff' ? 'btn-primary' : 'bg-gray-100 text-gray-600'}`} 
-                  onClick={() => setMapClickMode(mapClickMode === 'dropoff' ? null : 'dropoff')}
-                  title="Click map to set">
-                  <MousePointerClick size={18} />
-                </button>
-              </div>
-              {mapClickMode === 'dropoff' && <div className="text-xs text-blue-600 mt-1 animate-pulse">Click anywhere on map to set delivery...</div>}
-            </div>
-
-            <div className="flex gap-4 mb-4">
-              <div className="form-group w-full">
-                <label>Phone</label>
-                <input type="text" className="form-control" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
-              </div>
-              <div className="form-group w-full">
-                <label>Fee (KES)</label>
-                <input type="number" className="form-control" name="fee" value={formData.fee} onChange={handleInputChange} required />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary w-full justify-center">
-                <Send size={18} /> Dispatch
-              </button>
-              <button type="button" className="btn btn-success w-full justify-center" onClick={triggerMpesa}>
-                <Smartphone size={18} /> 
-                {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent!' : 'M-Pesa'}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div className="card mt-4 max-h-[300px] overflow-y-auto">
-          <h3 className="font-bold mb-3 text-sm text-gray-500 uppercase tracking-wider">Active Orders</h3>
-          {orders.map(order => (
-            <div key={order.id} className="p-3 mb-2 border border-gray-100 rounded-lg hover:shadow-sm transition-shadow bg-gray-50">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold">{order.customer_name}</span>
-                <span className={`status-badge status-${order.status === 'delivered' ? 'online' : (order.status === 'paid' ? 'online' : 'busy')}`} style={{ fontSize: '0.65rem' }}>
-                  {order.status}
-                </span>
-              </div>
-              <div className="text-gray-500 text-xs truncate max-w-full">
-                {order.pickup_address} → {order.dropoff_address}
-              </div>
-              <div className="text-gray-600 mt-1 text-xs font-semibold flex justify-between">
-                <span>KES {order.fee}</span>
-                <span className="text-primary-color">{riders[order.assigned_rider_id]?.name || 'Unassigned'}</span>
-              </div>
-            </div>
-          ))}
-          {orders.length === 0 && (
-            <div className="text-gray-400 text-center py-4 text-sm">No active orders</div>
-          )}
-        </div>
-      </div>
-
-      <div className="map-container relative z-0">
-        <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
-          <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          
-          <MapInteraction mode={mapClickMode} setFormData={setFormData} setMode={setMapClickMode} />
-
-          {formData.pickupLat && (
-            <Marker position={[formData.pickupLat, formData.pickupLng]}>
-              <Popup>Pickup Location</Popup>
-            </Marker>
-          )}
-          {formData.dropoffLat && (
-            <Marker position={[formData.dropoffLat, formData.dropoffLng]}>
-              <Popup>Delivery Location</Popup>
-            </Marker>
-          )}
-
-          {Object.values(riders).map((rider) => {
-            if (rider.status !== 'offline' && rider.current_lat) {
+          <div>
+            <div className="card-header" style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Active Orders</div>
+            {orders.map(order => {
+              if (order.status === 'delivered') return null;
               return (
-                <Marker key={rider.id} position={[rider.current_lat, rider.current_lng]} icon={createRiderIcon(rider.status)}>
-                  <Popup>
-                    <strong>{rider.name}</strong><br/>
-                    Status: <span style={{textTransform: 'capitalize'}}>{rider.status}</span><br/>
-                    Orders Today: {rider.orders_completed}
-                  </Popup>
-                </Marker>
-              );
-            }
-            return null;
-          })}
+                <div key={order.id} style={{ padding: '1rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '12px', marginBottom: '0.75rem' }}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold" style={{ fontSize: '0.95rem' }}>{order.customer_name}</span>
+                    <span className={`status-badge status-${order.status === 'paid' ? 'online' : 'busy'}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    {order.pickup_address} → {order.dropoff_address}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-green" style={{ fontSize: '0.9rem' }}>KES {order.fee}</span>
+                    <span style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--secondary)' }}>{riders[order.assigned_rider_id]?.name || 'Unassigned'}</span>
+                  </div>
+                </div>
+              )
+            })}
+            {orders.filter(o => o.status !== 'delivered').length === 0 && (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem', border: '1px dashed var(--border-light)', borderRadius: '12px' }}>
+                No active orders
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
-          {orders.filter(o => o.status !== 'delivered').map((order) => (
-            <React.Fragment key={order.id}>
-              {order.pickup_lat && (
-                <Marker position={[order.pickup_lat, order.pickup_lng]}>
-                  <Popup>Pickup: {order.customer_name}</Popup>
-                </Marker>
-              )}
-            </React.Fragment>
-          ))}
-        </MapContainer>
+      <div className="dashboard-main">
+        <div className="map-wrapper">
+          <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
+            <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            
+            <MapInteraction mode={mapClickMode} setFormData={setFormData} setMode={setMapClickMode} />
+
+            {formData.pickupLat && (
+              <Marker position={[formData.pickupLat, formData.pickupLng]}>
+                <Popup>Pickup Location</Popup>
+              </Marker>
+            )}
+            {formData.dropoffLat && (
+              <Marker position={[formData.dropoffLat, formData.dropoffLng]}>
+                <Popup>Delivery Location</Popup>
+              </Marker>
+            )}
+
+            {Object.values(riders).map((rider) => {
+              if (rider.status !== 'offline' && rider.current_lat) {
+                return (
+                  <Marker key={rider.id} position={[rider.current_lat, rider.current_lng]} icon={createRiderIcon(rider.status)}>
+                    <Popup>
+                      <strong>{rider.name}</strong><br/>
+                      Status: <span style={{textTransform: 'capitalize'}}>{rider.status}</span><br/>
+                      Orders Today: {rider.orders_completed}
+                    </Popup>
+                  </Marker>
+                );
+              }
+              return null;
+            })}
+
+            {orders.filter(o => o.status !== 'delivered').map((order) => (
+              <React.Fragment key={order.id}>
+                {order.pickup_lat && (
+                  <Marker position={[order.pickup_lat, order.pickup_lng]}>
+                    <Popup>Pickup: {order.customer_name}</Popup>
+                  </Marker>
+                )}
+              </React.Fragment>
+            ))}
+          </MapContainer>
+        </div>
       </div>
     </div>
   );
