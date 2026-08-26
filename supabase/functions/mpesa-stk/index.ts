@@ -65,7 +65,7 @@ serve(async (req) => {
       PartyB: DARAJA_SHORTCODE,
       PhoneNumber: formattedPhone,
       CallBackURL: CALLBACK_URL,
-      AccountReference: "Sudeis Delivery",
+      AccountReference: "Falcon Delivery",
       TransactionDesc: "Delivery Fee Payment"
     };
 

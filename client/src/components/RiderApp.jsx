@@ -1,21 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Navigation, CheckCircle, Package } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Package, DollarSign, ListOrdered, Wallet } from 'lucide-react';
 import { supabase } from '../supabase';
 
 export default function RiderApp({ riderCode }) {
   const [rider, setRider] = useState({ status: 'offline', orders_completed: 0, earnings: 0 });
   const [activeOrder, setActiveOrder] = useState(null);
+  const [historicalOrders, setHistoricalOrders] = useState([]);
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' or 'earnings'
   const watchIdRef = useRef(null);
   
   const isOnline = rider.status !== 'offline';
 
-  // 1. Fetch Initial Rider Data
+  // 1. Fetch Initial Rider Data & Historical Orders
   useEffect(() => {
-    const fetchRider = async () => {
-      const { data, error } = await supabase.from('riders').select('*').eq('rider_code', riderCode).single();
-      if (data) setRider(data);
+    const fetchData = async () => {
+      const { data: riderData } = await supabase.from('riders').select('*').eq('rider_code', riderCode).single();
+      if (riderData) {
+        setRider(riderData);
+        const { data: ordersData } = await supabase.from('orders')
+          .select('*')
+          .eq('assigned_rider_id', riderData.id)
+          .eq('status', 'delivered')
+          .order('updated_at', { ascending: false });
+        if (ordersData) setHistoricalOrders(ordersData);
+      }
     };
-    fetchRider();
+    fetchData();
   }, [riderCode]);
 
   // 2. Watch for Orders & Rider DB Updates
@@ -23,14 +33,12 @@ export default function RiderApp({ riderCode }) {
     if (!rider.id) return;
 
     const fetchOrders = async () => {
-      // Find active assigned order
       const { data: assigned } = await supabase.from('orders').select('*').eq('assigned_rider_id', rider.id).neq('status', 'delivered').single();
       if (assigned) {
         setActiveOrder(assigned);
         return;
       }
       
-      // Find pending orders to accept if online and not busy
       if (isOnline && rider.status !== 'busy') {
         const { data: pending } = await supabase.from('orders').select('*').eq('status', 'pending').order('created_at', { ascending: false }).limit(1).single();
         if (pending) setActiveOrder(pending);
@@ -42,7 +50,13 @@ export default function RiderApp({ riderCode }) {
     fetchOrders();
 
     const dbChannel = supabase.channel(`rider-${rider.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+        fetchOrders();
+        // Update historical orders if a new one is delivered
+        if (payload.eventType === 'UPDATE' && payload.new.status === 'delivered' && payload.new.assigned_rider_id === rider.id) {
+          setHistoricalOrders(prev => [payload.new, ...prev.filter(o => o.id !== payload.new.id)]);
+        }
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'riders', filter: `id=eq.${rider.id}` }, payload => setRider(payload.new))
       .subscribe();
 
@@ -60,16 +74,11 @@ export default function RiderApp({ riderCode }) {
           (position) => {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            
-            // Broadcast high-frequency ping (doesn't hit DB limits)
             gpsChannel.send({
               type: 'broadcast',
               event: 'location_update',
               payload: { riderId: rider.id, lat, lng }
             });
-
-            // Every few updates, we can update DB for persistence if needed, 
-            // but broadcast is fine for the CEO map.
           },
           (error) => console.error("GPS Error:", error),
           { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
@@ -127,12 +136,67 @@ export default function RiderApp({ riderCode }) {
     }
   };
 
+  if (activeTab === 'earnings') {
+    return (
+      <div className="rider-app bg-gray-50 flex flex-col h-full">
+        <div className="rider-header flex justify-between items-center bg-white shadow-sm pb-4 pt-6 px-6">
+          <h2 className="text-xl font-bold">{rider.name} - Finance</h2>
+          <button className="btn btn-outline text-sm" onClick={() => setActiveTab('orders')}>
+            Back to Orders
+          </button>
+        </div>
+
+        <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="card text-center p-6 border-t-4 border-green-500 shadow-sm bg-white">
+              <Wallet className="text-green-500 mx-auto mb-2" size={28} />
+              <div className="text-3xl font-bold text-gray-800">KES {rider.earnings}</div>
+              <div className="text-gray-500 text-sm font-medium mt-1">Total Gross Earnings</div>
+            </div>
+            <div className="card text-center p-6 border-t-4 border-blue-500 shadow-sm bg-white">
+              <ListOrdered className="text-blue-500 mx-auto mb-2" size={28} />
+              <div className="text-3xl font-bold text-gray-800">{rider.orders_completed}</div>
+              <div className="text-gray-500 text-sm font-medium mt-1">Total Deliveries</div>
+            </div>
+          </div>
+
+          <h3 className="font-bold text-lg text-gray-700 mb-3 px-1">Delivery History</h3>
+          <div className="space-y-3">
+            {historicalOrders.map(order => (
+              <div key={order.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div>
+                  <div className="text-xs text-gray-400 font-semibold mb-1">{new Date(order.updated_at).toLocaleDateString()}</div>
+                  <div className="font-bold text-gray-800">{order.customer_name}</div>
+                  <div className="text-xs text-gray-500 mt-1 max-w-[200px] truncate">{order.pickup_address} → {order.dropoff_address}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-green-600 text-lg">KES {order.fee}</div>
+                  <div className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full inline-block mt-1 uppercase tracking-wider font-bold">Delivered</div>
+                </div>
+              </div>
+            ))}
+            {historicalOrders.length === 0 && (
+              <div className="text-center py-10 text-gray-400 bg-white rounded-xl shadow-sm border border-gray-100">
+                You haven't completed any deliveries yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="rider-app">
-      <div className="rider-header">
-        <h2 className="text-xl font-bold mb-4">{rider.name}</h2>
-        <div className="flex justify-between items-center bg-white" style={{ padding: '1rem', borderRadius: '12px', color: '#1E293B' }}>
-          <div className="font-bold">
+    <div className="rider-app flex flex-col h-full">
+      <div className="rider-header pb-2">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{rider.name}</h2>
+          <button className="btn bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setActiveTab('earnings')}>
+            <Wallet size={16} className="inline mr-1" /> My Earnings
+          </button>
+        </div>
+        <div className="flex justify-between items-center bg-white" style={{ padding: '1rem', borderRadius: '12px', color: '#1E293B', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+          <div className="font-bold flex items-center gap-2">
             Status: <span className={`status-badge status-${rider.status}`}>{rider.status}</span>
           </div>
           <label className="toggle-switch">
@@ -142,78 +206,67 @@ export default function RiderApp({ riderCode }) {
         </div>
       </div>
 
-      <div className="p-4" style={{ flex: 1 }}>
+      <div className="p-4" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {activeOrder ? (
-          <div className="card order-card">
-            <div className="flex justify-between mb-4">
-              <span className="font-bold bg-gray-100 px-2 py-1 rounded" style={{ backgroundColor: '#F1F5F9', borderRadius: '4px', fontSize: '0.8rem' }}>
+          <div className="card order-card shadow-lg border-2 border-primary-color/20">
+            <div className="flex justify-between mb-4 pb-3 border-b border-gray-100">
+              <span className="font-bold bg-gray-100 px-3 py-1 rounded-md text-sm text-gray-600">
                 {activeOrder.order_number}
               </span>
-              <span className="font-bold text-accent-color">KES {activeOrder.fee}</span>
+              <span className="font-bold text-green-600 text-lg">KES {activeOrder.fee}</span>
             </div>
             
-            <h3 className="font-bold text-xl mb-3">{activeOrder.customer_name}</h3>
+            <h3 className="font-bold text-2xl mb-4 text-gray-800">{activeOrder.customer_name}</h3>
             
-            <div className="mb-3 flex items-start gap-2">
-              <Package size={18} className="text-gray mt-1" />
+            <div className="mb-4 flex items-start gap-3 bg-gray-50 p-3 rounded-lg">
+              <Package size={20} className="text-gray-500 mt-0.5" />
               <div>
-                <div className="font-bold" style={{ fontSize: '0.8rem' }}>PICKUP</div>
-                <div>{activeOrder.pickup_address}</div>
+                <div className="font-bold text-xs text-gray-500 tracking-wider mb-1">PICKUP</div>
+                <div className="font-medium text-gray-800">{activeOrder.pickup_address}</div>
               </div>
             </div>
             
-            <div className="mb-4 flex items-start gap-2">
-              <MapPin size={18} className="text-secondary-color mt-1" />
+            <div className="mb-6 flex items-start gap-3 bg-blue-50 p-3 rounded-lg">
+              <MapPin size={20} className="text-blue-500 mt-0.5" />
               <div>
-                <div className="font-bold text-secondary-color" style={{ fontSize: '0.8rem' }}>DROPOFF</div>
-                <div>{activeOrder.dropoff_address}</div>
+                <div className="font-bold text-xs text-blue-500 tracking-wider mb-1">DROPOFF</div>
+                <div className="font-medium text-gray-800">{activeOrder.dropoff_address}</div>
               </div>
             </div>
 
             {activeOrder.status === 'pending' && (
-              <button className="btn btn-primary w-full justify-center py-3" onClick={handleAccept} style={{ padding: '1rem' }}>
+              <button className="btn btn-primary w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={handleAccept}>
                 Accept Delivery Order
               </button>
             )}
             
             {activeOrder.status === 'accepted' && (
-              <button className="btn btn-primary w-full justify-center py-3" onClick={() => handleUpdateStatus('picked_up')} style={{ padding: '1rem' }}>
-                <Navigation size={18} /> Mark as Picked Up
+              <button className="btn btn-primary w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={() => handleUpdateStatus('picked_up')}>
+                <Navigation size={20} className="mr-2" /> Mark as Picked Up
               </button>
             )}
             
             {activeOrder.status === 'picked_up' && (
-              <button className="btn btn-success w-full justify-center py-3" onClick={() => handleUpdateStatus('delivered')} style={{ padding: '1rem' }}>
-                <CheckCircle size={18} /> Complete Delivery
+              <button className="btn btn-success w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={() => handleUpdateStatus('delivered')}>
+                <CheckCircle size={20} className="mr-2" /> Complete Delivery
               </button>
             )}
           </div>
         ) : (
-          <div className="card text-center" style={{ padding: '3rem 1rem' }}>
-            <div className="text-gray mb-3" style={{ opacity: 0.5 }}>
-              <Navigation size={48} className="mx-auto" />
+          <div className="card text-center flex flex-col justify-center items-center h-full border-dashed border-2 border-gray-200">
+            <div className="text-gray-300 mb-4 bg-gray-50 p-4 rounded-full">
+              <Navigation size={48} />
             </div>
             {isOnline ? (
-              <h3 className="font-bold text-xl">Searching for orders...</h3>
+              <h3 className="font-bold text-2xl text-gray-800">Searching for orders...</h3>
             ) : (
-              <h3 className="font-bold text-xl text-gray">You are offline</h3>
+              <h3 className="font-bold text-2xl text-gray-400">You are offline</h3>
             )}
-            <p className="text-gray mt-2" style={{ fontSize: '0.9rem' }}>
-              {isOnline ? "Stay online to receive new delivery requests." : "Toggle your status to online to start receiving orders."}
+            <p className="text-gray-500 mt-3 max-w-[250px] mx-auto text-sm">
+              {isOnline ? "Stay online and keep the app open to receive new delivery requests." : "Toggle your status to online at the top to start receiving orders."}
             </p>
           </div>
         )}
-
-        <div className="grid mt-4 gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-          <div className="card text-center" style={{ padding: '1rem' }}>
-            <div className="text-2xl font-bold">{rider.orders_completed}</div>
-            <div className="text-gray" style={{ fontSize: '0.8rem' }}>Orders Today</div>
-          </div>
-          <div className="card text-center" style={{ padding: '1rem' }}>
-            <div className="text-2xl font-bold text-accent-color">KES {rider.earnings}</div>
-            <div className="text-gray" style={{ fontSize: '0.8rem' }}>Earnings</div>
-          </div>
-        </div>
       </div>
     </div>
   );
