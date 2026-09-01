@@ -42,8 +42,12 @@
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+.top-banner span {
+  font-style: italic;
+}
 .top-banner strong {
   color: #F8FAFC;
+  font-style: normal;
 }
 .banner-link {
   color: #38BDF8;
@@ -106,6 +110,7 @@
 }
 .brand-accent {
   color: var(--accent-blue);
+  font-style: italic;
 }
 .brand-tagline {
   font-size: 0.7rem;
@@ -113,6 +118,7 @@
   letter-spacing: 1px;
   color: var(--text-muted);
   font-weight: 600;
+  font-style: italic;
 }
 .nav-links {
   display: flex;
@@ -186,6 +192,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 1.25rem;
+  font-style: italic;
 }
 .pulse-dot {
   width: 8px;
@@ -212,12 +219,14 @@
   background: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  font-style: italic;
 }
 .hero-subtitle {
   font-size: 1.15rem;
   line-height: 1.6;
   color: var(--text-muted);
   margin-bottom: 2rem;
+  font-style: italic;
 }
 .hero-cta-group {
   display: flex;
@@ -275,6 +284,7 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: #334155;
+  font-style: italic;
 }
 
 /* Hero Visual Card */
@@ -305,6 +315,7 @@
   border-radius: 20px;
   width: fit-content;
   margin-bottom: 1.5rem;
+  font-style: italic;
 }
 .live-indicator {
   width: 6px;
@@ -404,6 +415,7 @@
   font-size: 0.9rem;
   color: #94A3B8;
   font-weight: 500;
+  font-style: italic;
 }
 
 /* ----------------- Common Section Layout ----------------- */
@@ -429,6 +441,7 @@
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 0.75rem;
+  font-style: italic;
 }
 .section-tag-light {
   display: inline-block;
@@ -438,6 +451,7 @@
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 0.75rem;
+  font-style: italic;
 }
 .section-title {
   font-size: 2.25rem;
@@ -450,6 +464,7 @@
   font-size: 1.05rem;
   color: var(--text-muted);
   line-height: 1.6;
+  font-style: italic;
 }
 
 /* ----------------- About Section ----------------- */
@@ -628,6 +643,7 @@
   font-size: 0.95rem;
   line-height: 1.5;
   margin-bottom: 1.75rem;
+  font-style: italic;
 }
 .btn-portal-cta {
   background: #3B82F6;
@@ -674,6 +690,7 @@
   font-size: 1rem;
   line-height: 1.6;
   margin-bottom: 2rem;
+  font-style: italic;
 }
 .contact-details {
   display: flex;
@@ -765,6 +782,7 @@
   font-size: 0.9rem;
   line-height: 1.5;
   max-width: 350px;
+  font-style: italic;
 }
 .footer-links-col h4 {
   color: white;
