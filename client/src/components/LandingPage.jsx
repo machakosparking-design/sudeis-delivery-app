@@ -107,7 +107,7 @@ export default function LandingPage({ onGoToApp }) {
           </nav>
 
           <div className="nav-actions">
-            <button className="btn-portal-login" onClick={onGoToApp}>
+            <button className="btn-portal-login" onClick={() => onGoToApp('rider')}>
               <LogIn size={16} />
               <span>Operations Portal</span>
             </button>
@@ -141,7 +141,7 @@ export default function LandingPage({ onGoToApp }) {
               >
                 <MessageCircle size={18} /> Book a Delivery on WhatsApp
               </a>
-              <button className="btn-hero-secondary" onClick={onGoToApp}>
+              <button className="btn-hero-secondary" onClick={() => onGoToApp('rider')}>
                 <span>Staff & Rider Login</span>
                 <ArrowRight size={18} />
               </button>
@@ -307,7 +307,7 @@ export default function LandingPage({ onGoToApp }) {
                 <Truck size={40} className="text-amber mb-3" />
                 <h3>Falcon Operations System</h3>
                 <p>Are you a Falcon Delivery team member, rider, or partner? Access the central dispatch management system.</p>
-                <button className="btn-portal-cta" onClick={onGoToApp}>
+                <button className="btn-portal-cta" onClick={() => onGoToApp('rider')}>
                   <span>Open System Portal</span>
                   <ExternalLink size={16} />
                 </button>
@@ -396,8 +396,8 @@ export default function LandingPage({ onGoToApp }) {
 
           <div className="footer-links-col">
             <h4>Operations</h4>
-            <button className="footer-link-btn" onClick={onGoToApp}>CEO Admin Panel</button>
-            <button className="footer-link-btn" onClick={onGoToApp}>Rider Dispatch Portal</button>
+            <button className="footer-link-btn" onClick={() => onGoToApp('ceo')}>CEO Admin Panel</button>
+            <button className="footer-link-btn" onClick={() => onGoToApp('rider')}>Rider Dispatch Portal</button>
             <a href="https://wa.me/254700000000" target="_blank" rel="noopener noreferrer">WhatsApp Support</a>
           </div>
         </div>

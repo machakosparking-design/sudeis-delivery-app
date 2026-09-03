@@ -8,47 +8,75 @@ const CEOAdminPanel = lazy(() => import('./components/CEOAdminPanel'));
 const RiderApp = lazy(() => import('./components/RiderApp'));
 
 export default function App() {
-  // Check if user is visiting via app subdomain or /app path
-  const isAppDomainOrPath = () => {
-    if (typeof window === 'undefined') return false;
+  // Determine the context based on subdomain or path
+  const getDomainContext = () => {
+    if (typeof window === 'undefined') return { view: 'landing', systemType: null };
     const hostname = window.location.hostname.toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
 
-    // Subdomains: app.falcondelivery.co.ke or system.falcondelivery.co.ke
-    if (hostname.startsWith('app.') || hostname.startsWith('system.')) {
-      return true;
+    // CEO Admin - system.falcondelivery.co.ke
+    if (hostname.startsWith('system.') || pathname.startsWith('/system') || hash.includes('/system')) {
+      return { view: 'app', systemType: 'ceo' };
     }
-    // Path / Hash: /app, /system, #/app
-    if (pathname.startsWith('/app') || pathname.startsWith('/system') || hash.includes('/app') || hash.includes('/system')) {
-      return true;
+    
+    // Rider App - app.falcondelivery.co.ke
+    if (hostname.startsWith('app.') || pathname.startsWith('/app') || hash.includes('/app')) {
+      return { view: 'app', systemType: 'rider' };
     }
-    return false;
+    
+    return { view: 'landing', systemType: null };
   };
 
-  const [currentView, setCurrentView] = useState(() => isAppDomainOrPath() ? 'app' : 'landing');
-  const [currentRole, setCurrentRole] = useState('ceo'); // 'ceo', 'rider_1', 'rider_2', 'rider_3'
+  const initContext = getDomainContext();
+  const [currentView, setCurrentView] = useState(initContext.view);
+  const [systemType, setSystemType] = useState(initContext.systemType);
+  const [currentRole, setCurrentRole] = useState(initContext.systemType === 'ceo' ? 'ceo' : 'rider_1');
 
   // Listen to popstate / browser history navigation
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentView(isAppDomainOrPath() ? 'app' : 'landing');
+      const ctx = getDomainContext();
+      setCurrentView(ctx.view);
+      setSystemType(ctx.systemType);
+      
+      // Update role automatically if switching contexts via history
+      if (ctx.systemType === 'ceo') {
+        setCurrentRole('ceo');
+      } else if (ctx.systemType === 'rider' && currentRole === 'ceo') {
+        setCurrentRole('rider_1');
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [currentRole]);
 
-  const handleGoToApp = () => {
-    // If in production on falcondelivery.co.ke and app subdomain is configured:
+  const handleGoToApp = (targetRole = 'rider') => {
     const hostname = window.location.hostname;
-    if (hostname === 'falcondelivery.co.ke' || hostname === 'www.falcondelivery.co.ke') {
-      window.location.href = `https://app.falcondelivery.co.ke`;
+    
+    // If in production, route to appropriate subdomain
+    if (hostname.includes('falcondelivery.co.ke') || hostname.includes('falcon.co.ke')) {
+      if (targetRole === 'ceo') {
+        window.location.href = `https://system.falcondelivery.co.ke`;
+      } else {
+        window.location.href = `https://app.falcondelivery.co.ke`;
+      }
       return;
     }
     
     // Otherwise (local dev or fallback), switch view and push state
-    if (window.location.pathname !== '/app') {
-      window.history.pushState({}, '', '/app');
+    if (targetRole === 'ceo') {
+      if (window.location.pathname !== '/system') {
+        window.history.pushState({}, '', '/system');
+      }
+      setSystemType('ceo');
+      setCurrentRole('ceo');
+    } else {
+      if (window.location.pathname !== '/app') {
+        window.history.pushState({}, '', '/app');
+      }
+      setSystemType('rider');
+      setCurrentRole('rider_1');
     }
     setCurrentView('app');
     window.scrollTo(0, 0);
@@ -56,13 +84,18 @@ export default function App() {
 
   const handleBackToWebsite = () => {
     const hostname = window.location.hostname;
+    // If on a dedicated subdomain, return to the main website
     if (hostname.startsWith('app.') || hostname.startsWith('system.')) {
-      window.location.href = `https://falcondelivery.co.ke`;
+      // Use the root domain without subdomains (this also supports falcon.co.ke if configured)
+      const rootDomain = hostname.replace('app.', '').replace('system.', '');
+      window.location.href = `https://${rootDomain}`;
       return;
     }
     
+    // Local dev fallback
     window.history.pushState({}, '', '/');
     setCurrentView('landing');
+    setSystemType(null);
     window.scrollTo(0, 0);
   };
 
@@ -87,19 +120,22 @@ export default function App() {
           </button>
 
           <div className="flex items-center gap-2 text-xl font-bold" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Truck /> Falcon Delivery Operations
+            <Truck /> Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}
           </div>
         </div>
 
         <div className="role-selector">
-          <button 
-            className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
-            onClick={() => setCurrentRole('ceo')}
-            style={currentRole !== 'ceo' ? { backgroundColor: 'transparent', color: 'rgba(255,255,255,0.7)', border: 'none' } : {}}
-          >
-            CEO Admin
-          </button>
-          {['rider_1', 'rider_2', 'rider_3'].map(riderId => (
+          {(!systemType || systemType === 'ceo') && (
+            <button 
+              className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
+              onClick={() => setCurrentRole('ceo')}
+              style={currentRole !== 'ceo' ? { backgroundColor: 'transparent', color: 'rgba(255,255,255,0.7)', border: 'none' } : {}}
+            >
+              CEO Admin
+            </button>
+          )}
+          
+          {(!systemType || systemType === 'rider') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
             <button 
               key={riderId}
               className={`btn ${currentRole === riderId ? 'btn-outline' : ''}`}
