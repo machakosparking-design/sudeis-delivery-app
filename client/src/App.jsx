@@ -1,7 +1,9 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import LandingPage from './components/LandingPage';
+import AuthLogin from './components/AuthLogin';
 import './index.css';
-import { Truck, ArrowLeft, Loader2 } from 'lucide-react';
+import { Truck, ArrowLeft, Loader2, LogOut } from 'lucide-react';
+import { supabase } from './supabase';
 
 // Lazy-load heavy components so landing page visitors download 0 extra weight!
 const CEOAdminPanel = lazy(() => import('./components/CEOAdminPanel'));
@@ -32,6 +34,21 @@ export default function App() {
   const [currentView, setCurrentView] = useState(initContext.view);
   const [systemType, setSystemType] = useState(initContext.systemType);
   const [currentRole, setCurrentRole] = useState(initContext.systemType === 'ceo' ? 'ceo' : 'rider_1');
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Listen to popstate / browser history navigation
   useEffect(() => {
@@ -99,9 +116,18 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   // If on landing page view, render the LandingPage component
   if (currentView === 'landing') {
     return <LandingPage onGoToApp={handleGoToApp} />;
+  }
+
+  // Delivery System View - Requires Auth
+  if (!session) {
+    return <AuthLogin systemType={systemType} onAuthSuccess={(sess) => setSession(sess)} />;
   }
 
   // Delivery System View (CEO Admin & Rider App)
@@ -124,7 +150,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="role-selector">
+        <div className="role-selector" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {(!systemType || systemType === 'ceo') && (
             <button 
               className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
@@ -145,6 +171,15 @@ export default function App() {
               {riderId === 'rider_1' ? 'Rider 1' : riderId === 'rider_2' ? 'Rider 2' : 'Rider 3'}
             </button>
           ))}
+          
+          <button 
+            onClick={handleSignOut}
+            className="btn btn-outline"
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', marginLeft: 'auto', backgroundColor: 'transparent', color: '#f87171', border: '1px solid #f87171' }}
+            title="Sign Out"
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
         </div>
       </header>
 
