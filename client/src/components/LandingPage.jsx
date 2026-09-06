@@ -220,7 +220,7 @@ export default function LandingPage({ onGoToApp }) {
         <div className="hero-container">
           <div className="hero-content">
             <div className="hero-badge">
-              <span className="pulse-dot"></span> Kenya's Trusted Delivery Network
+              <ShieldCheck size={14} /> Kenya's Trusted Delivery Network
             </div>
             <h1 className="hero-title">
               Delivering Speed, Trust & Precision <span className="gradient-text">To Your Doorstep</span>
@@ -269,9 +269,7 @@ export default function LandingPage({ onGoToApp }) {
             <p className="stat-label">Verified Riders</p>
           </div>
           <div className="stat-card stagger-4">
-            <h3 className="stat-number" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <span className="live-stat-dot" /> 24/7
-            </h3>
+            <h3 className="stat-number">24/7</h3>
             <p className="stat-label">Customer Support</p>
           </div>
         </div>
