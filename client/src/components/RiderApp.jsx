@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Navigation, CheckCircle, Package, DollarSign, ListOrdered, Wallet } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Package, DollarSign, ListOrdered, Wallet, Phone, MessageCircle, Copy, Check } from 'lucide-react';
 import { supabase } from '../supabase';
+
+const formatKenyanPhone = (phone) => {
+  if (!phone) return '';
+  let cleaned = String(phone).replace(/[^0-9]/g, '');
+  if (cleaned.startsWith('0')) {
+    cleaned = '254' + cleaned.substring(1);
+  } else if (cleaned.startsWith('7') || cleaned.startsWith('1')) {
+    cleaned = '254' + cleaned;
+  }
+  return cleaned;
+};
 
 export default function RiderApp({ riderCode }) {
   const [rider, setRider] = useState({ status: 'offline', orders_completed: 0, earnings: 0 });
   const [activeOrder, setActiveOrder] = useState(null);
   const [historicalOrders, setHistoricalOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' or 'earnings'
+  const [copiedPhone, setCopiedPhone] = useState(false);
   const watchIdRef = useRef(null);
   
   const isOnline = rider.status !== 'offline';
@@ -244,7 +256,55 @@ export default function RiderApp({ riderCode }) {
               <span className="font-bold text-green-600 text-lg">KES {activeOrder.fee}</span>
             </div>
             
-            <h3 className="font-bold text-2xl mb-4 text-gray-800">{activeOrder.customer_name}</h3>
+            <h3 className="font-bold text-2xl mb-3 text-gray-800">{activeOrder.customer_name}</h3>
+            
+            {/* Customer Contact Bar (Phone Features for Rider) */}
+            {activeOrder.customer_phone && (
+              <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-xl flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                    <Phone size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Customer Phone</div>
+                    <div className="font-mono font-bold text-gray-800 text-sm truncate">
+                      {activeOrder.customer_phone}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <a
+                    href={`tel:${activeOrder.customer_phone}`}
+                    className="btn btn-primary py-1.5 px-3 text-xs flex items-center gap-1 font-semibold"
+                    title="Direct Phone Call"
+                  >
+                    <Phone size={13} /> Call
+                  </a>
+                  <a
+                    href={`https://wa.me/${formatKenyanPhone(activeOrder.customer_phone)}?text=${encodeURIComponent(`Hello ${activeOrder.customer_name}, this is ${rider.name} from Falcon Delivery. I am handling your delivery (${activeOrder.order_number}).`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn py-1.5 px-3 text-xs flex items-center gap-1 font-semibold"
+                    style={{ backgroundColor: '#25D366', color: 'white' }}
+                    title="Chat on WhatsApp"
+                  >
+                    <MessageCircle size={13} /> WhatsApp
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeOrder.customer_phone);
+                      setCopiedPhone(true);
+                      setTimeout(() => setCopiedPhone(false), 2000);
+                    }}
+                    className="p-2 rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-100"
+                    title="Copy phone"
+                  >
+                    {copiedPhone ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+            )}
             
             <div className="mb-4 flex items-start gap-3 bg-gray-50 p-3 rounded-lg">
               <Package size={20} className="text-gray-500 mt-0.5" />
