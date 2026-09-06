@@ -4,7 +4,8 @@ import L from 'leaflet';
 import { 
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
-  Layers, Phone, MessageCircle, Copy, Check, ArrowRight
+  Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
+  CheckCircle, Receipt, AlertCircle, Loader2
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -109,7 +110,24 @@ export default function CEOAdminPanel() {
     description: ''
   });
 
-  const [paymentStatus, setPaymentStatus] = useState(null);
+  // STK Push Modal State
+  const [stkModalData, setStkModalData] = useState({
+    isOpen: false,
+    orderId: null,
+    orderNumber: '',
+    customerName: '',
+    amount: '',
+    phone: ''
+  });
+  const [stkStatus, setStkStatus] = useState(null); // 'loading', 'success', 'error'
+  const [stkMessage, setStkMessage] = useState('');
+
+  // Payment Realtime Toast Banner
+  const [paymentToast, setPaymentToast] = useState(null);
+
+  // Active Orders Filter
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState('all'); // 'all', 'unpaid', 'paid'
+
   const [copiedOrderId, setCopiedOrderId] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' or 'finance'
   const [mapClickMode, setMapClickMode] = useState(null); // 'pickup', 'dropoff', null
@@ -133,7 +151,20 @@ export default function CEOAdminPanel() {
         if (payload.eventType === 'INSERT') {
           setOrders(prev => [payload.new, ...prev]);
         } else if (payload.eventType === 'UPDATE') {
-          setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o));
+          setOrders(prev => {
+            const oldOrder = prev.find(o => o.id === payload.new.id);
+            // Detect newly paid order to trigger live toast
+            if (payload.new.status === 'paid' && oldOrder && oldOrder.status !== 'paid') {
+              setPaymentToast({
+                customer: payload.new.customer_name,
+                amount: payload.new.fee,
+                receipt: payload.new.mpesa_receipt || 'Received',
+                orderNumber: payload.new.order_number
+              });
+              setTimeout(() => setPaymentToast(null), 8000);
+            }
+            return prev.map(o => o.id === payload.new.id ? payload.new : o);
+          });
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, payload => {
@@ -172,7 +203,7 @@ export default function CEOAdminPanel() {
     const dropoffLat = formData.dropoffLat || -1.2921 + (Math.random() * 0.01 - 0.005);
     const dropoffLng = formData.dropoffLng || 36.8219 + (Math.random() * 0.01 - 0.005);
 
-    const { error } = await supabase.from('orders').insert([{
+    const { data, error } = await supabase.from('orders').insert([{
       order_number: `ORD-${Date.now()}`,
       customer_name: formData.customerName,
       customer_phone: formData.customerPhone,
@@ -184,9 +215,10 @@ export default function CEOAdminPanel() {
       dropoff_lng: dropoffLng,
       fee: parseFloat(formData.fee),
       status: 'pending'
-    }]);
+    }]).select();
 
     if (!error) {
+      const createdOrder = data?.[0];
       setFormData({ 
         customerName: '', customerPhone: '', 
         pickup: '', pickupLat: null, pickupLng: null,
@@ -194,6 +226,11 @@ export default function CEOAdminPanel() {
         fee: '' 
       });
       alert("Order dispatched to riders!");
+
+      // Option: Prompt if they want to trigger STK immediately
+      if (createdOrder && createdOrder.customer_phone) {
+        openStkModal(createdOrder);
+      }
     } else {
       alert("Error dispatching order: " + error.message);
     }
@@ -278,34 +315,101 @@ export default function CEOAdminPanel() {
     setTimeout(() => setCopiedOrderId(null), 2000);
   };
 
-  const triggerMpesa = async (orderId = null) => {
-    const phone = formData.customerPhone;
-    const amount = formData.fee;
-    if (!phone || !amount) {
-      alert("Please enter customer phone and fee to trigger M-Pesa");
+  // ── Open STK Modal for an Existing Order ───────────────────────────────────
+  const openStkModal = (order) => {
+    setStkModalData({
+      isOpen: true,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      amount: order.fee,
+      phone: order.customer_phone || ''
+    });
+    setStkStatus(null);
+    setStkMessage('');
+  };
+
+  // ── Open STK Modal from Dispatch Form (Single Order) ───────────────────────
+  const openDispatchFormStkModal = () => {
+    if (!formData.customerPhone || !formData.fee) {
+      alert("Please enter customer phone and fee in the dispatch form first.");
       return;
     }
-    
-    setPaymentStatus('loading');
+    setStkModalData({
+      isOpen: true,
+      orderId: null,
+      orderNumber: 'New Dispatch',
+      customerName: formData.customerName || 'Customer',
+      amount: formData.fee,
+      phone: formData.customerPhone
+    });
+    setStkStatus(null);
+    setStkMessage('');
+  };
+
+  // ── Send M-Pesa STK Push from Modal ───────────────────────────────────────
+  const handleSendStkPush = async (e) => {
+    e.preventDefault();
+    if (!stkModalData.phone || !stkModalData.amount) {
+      setStkStatus('error');
+      setStkMessage('Phone number and amount are required.');
+      return;
+    }
+
+    setStkStatus('loading');
+    setStkMessage('Sending STK prompt to customer phone...');
+
     try {
-      const { error } = await supabase.functions.invoke('mpesa-stk', {
-        body: { phone, amount, orderId }
+      const { data, error } = await supabase.functions.invoke('mpesa-stk', {
+        body: { 
+          phone: stkModalData.phone, 
+          amount: parseFloat(stkModalData.amount), 
+          orderId: stkModalData.orderId 
+        }
       });
-      
+
       if (error) throw error;
-      setPaymentStatus('success');
-      setTimeout(() => setPaymentStatus(null), 3000);
-    } catch (error) {
-      console.error(error);
-      setPaymentStatus('error');
-      alert("M-Pesa Request Failed: " + (error.message || 'Check credentials'));
+      if (data && data.success === false) {
+        throw new Error(data.error || 'Failed to trigger STK push');
+      }
+
+      setStkStatus('success');
+      setStkMessage(`STK push sent to ${stkModalData.phone}! Awaiting customer PIN on phone.`);
+      
+      // Auto-close modal after 3.5 seconds on success
+      setTimeout(() => {
+        setStkModalData(prev => ({ ...prev, isOpen: false }));
+        setStkStatus(null);
+      }, 3500);
+
+    } catch (err) {
+      console.error('STK Push Error:', err);
+      setStkStatus('error');
+      setStkMessage(err.message || 'M-Pesa STK push request failed.');
     }
   };
 
-  const totalOrders = orders.filter(o => o.status === 'delivered').length;
-  const totalEarnings = Object.values(riders).reduce((acc, rider) => acc + Number(rider.earnings || 0), 0);
+  // ── Revenue & Metric Calculations ──────────────────────────────────────────
+  const totalCollectedRevenue = orders
+    .filter(o => o.status === 'paid' || o.status === 'delivered' || o.mpesa_receipt)
+    .reduce((acc, o) => acc + (parseFloat(o.fee) || 0), 0);
+
+  const totalPendingRevenue = orders
+    .filter(o => o.status !== 'paid' && o.status !== 'delivered' && !o.mpesa_receipt)
+    .reduce((acc, o) => acc + (parseFloat(o.fee) || 0), 0);
+
+  const totalPaidOrders = orders.filter(o => o.status === 'paid' || o.mpesa_receipt).length;
   const activeRiders = Object.values(riders).filter(r => r.status === 'online' || r.status === 'busy').length;
   const nairobiCenter = [-1.2921, 36.8219];
+
+  // Filter active orders based on payment status
+  const filteredActiveOrders = orders.filter(o => {
+    if (o.status === 'delivered') return false;
+    const isPaid = o.status === 'paid' || !!o.mpesa_receipt;
+    if (orderPaymentFilter === 'paid') return isPaid;
+    if (orderPaymentFilter === 'unpaid') return !isPaid;
+    return true;
+  });
 
   const riderStats = Object.values(riders).map(rider => ({
     name: rider.name,
@@ -313,34 +417,92 @@ export default function CEOAdminPanel() {
     orders: rider.orders_completed || 0
   }));
 
+  // List of all received payments for Finance dashboard
+  const paidOrdersList = orders.filter(o => o.status === 'paid' || o.mpesa_receipt);
+
   if (activeTab === 'finance') {
     return (
       <div className="finance-dashboard">
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">Financial Analytics</h1>
+          <h1 className="text-2xl font-bold">Payment & Financial Overview</h1>
           <button className="btn btn-primary" onClick={() => setActiveTab('dashboard')}>
             <MapIcon size={16} /> Back to Live Map
           </button>
         </div>
 
+        {/* Financial Highlights */}
         <div className="metric-grid mb-4">
           <div className="metric-card">
-            <div className="metric-label">Total Revenue</div>
-            <div className="metric-value text-green">KES {totalEarnings}</div>
+            <div className="metric-label">Total Collected</div>
+            <div className="metric-value text-green">KES {totalCollectedRevenue.toLocaleString()}</div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">Delivered Orders</div>
-            <div className="metric-value">{totalOrders}</div>
+            <div className="metric-label">Pending Collection</div>
+            <div className="metric-value" style={{ color: '#F59E0B' }}>KES {totalPendingRevenue.toLocaleString()}</div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">Active Fleet</div>
-            <div className="metric-value text-blue">{activeRiders} / {Object.keys(riders).length || 3}</div>
+            <div className="metric-label">Paid Transactions</div>
+            <div className="metric-value text-blue">{totalPaidOrders} / {orders.length}</div>
           </div>
         </div>
 
+        {/* Received Payments Ledger */}
+        <div className="card mb-4">
+          <div className="card-header">
+            <Receipt size={18} /> Recent M-Pesa Payments Received ({paidOrdersList.length})
+          </div>
+          {paidOrdersList.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+              No payments recorded yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #E2E8F0', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Receipt #</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Order #</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Customer</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Phone</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Amount</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paidOrdersList.map(order => (
+                    <tr key={order.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: '#1E40AF' }}>
+                        {order.mpesa_receipt || 'M-PESA'}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                        {order.order_number}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>
+                        {order.customer_name}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>
+                        {order.customer_phone || '—'}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 800, color: '#16A34A' }}>
+                        KES {order.fee}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>
+                        <span className="badge-paid">
+                          <CheckCircle size={12} /> PAID
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Rider Revenue Chart */}
         <div className="card">
           <div className="card-header"><DollarSign size={18} /> Revenue by Rider</div>
-          <div style={{ width: '100%', height: '300px' }}>
+          <div style={{ width: '100%', height: '280px' }}>
             <ResponsiveContainer>
               <BarChart data={riderStats} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -358,24 +520,138 @@ export default function CEOAdminPanel() {
 
   return (
     <div className="dashboard-grid">
+      {/* Real-time Payment Toast Notification */}
+      {paymentToast && (
+        <div className="payment-toast">
+          <CheckCircle size={24} color="#10B981" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.9rem' }}>Payment Received!</div>
+            <div style={{ fontSize: '0.8rem', color: '#16A34A', fontWeight: 700 }}>
+              KES {paymentToast.amount} · {paymentToast.customer}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#64748B', fontFamily: 'monospace' }}>
+              Receipt: {paymentToast.receipt}
+            </div>
+          </div>
+          <button className="toast-close-btn" onClick={() => setPaymentToast(null)}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* STK Push Confirmation Modal */}
+      {stkModalData.isOpen && (
+        <div className="modal-backdrop" onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Smartphone size={18} color="#10B981" /> Send M-Pesa STK Push</h3>
+              <button 
+                type="button" 
+                onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendStkPush}>
+              <div className="modal-body">
+                {/* Order Summary Box */}
+                <div style={{ backgroundColor: '#F8FAFC', padding: '0.85rem', borderRadius: '10px', border: '1px solid #E2E8F0', marginBottom: '1.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Order Summary</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{stkModalData.customerName}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748B' }}>{stkModalData.orderNumber}</span>
+                  </div>
+                </div>
+
+                {/* Status / Feedback Banner */}
+                {stkStatus === 'loading' && (
+                  <div style={{ backgroundColor: '#EFF6FF', color: '#1E40AF', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
+                    <Loader2 size={16} className="animate-spin" /> {stkMessage}
+                  </div>
+                )}
+                {stkStatus === 'success' && (
+                  <div style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: 600 }}>
+                    <CheckCircle size={16} /> {stkMessage}
+                  </div>
+                )}
+                {stkStatus === 'error' && (
+                  <div style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: 600 }}>
+                    <AlertCircle size={16} /> {stkMessage}
+                  </div>
+                )}
+
+                {/* Editable Phone Field */}
+                <div className="form-group">
+                  <label>Customer Safaricom Number</label>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value={stkModalData.phone}
+                    onChange={(e) => setStkModalData({ ...stkModalData, phone: e.target.value })}
+                    placeholder="e.g. 0712345678 or 254..."
+                    required
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
+                    You can change this number if the customer wishes to pay using another M-Pesa line.
+                  </span>
+                </div>
+
+                {/* Editable Amount Field */}
+                <div className="form-group">
+                  <label>Amount to Charge (KES)</label>
+                  <input 
+                    type="number" 
+                    className="form-control font-bold" 
+                    value={stkModalData.amount}
+                    onChange={(e) => setStkModalData({ ...stkModalData, amount: e.target.value })}
+                    style={{ fontSize: '1.1rem', color: '#16A34A' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button 
+                  type="button" 
+                  className="btn btn-outline-dark" 
+                  onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}
+                  disabled={stkStatus === 'loading'}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-success" 
+                  disabled={stkStatus === 'loading'}
+                >
+                  {stkStatus === 'loading' ? 'Sending...' : 'Send STK Push Now'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Left Column: Sidebar with forms & active orders */}
       <div className="sidebar-scrollable">
         {/* Top Summary Metrics */}
         <div className="metric-grid">
           <div className="metric-card">
-            <Activity size={18} className="text-blue" style={{ margin: '0 auto' }} />
-            <div className="metric-value">{totalOrders}</div>
-            <div className="metric-label">Delivered</div>
-          </div>
-          <div className="metric-card">
             <DollarSign size={18} className="text-green" style={{ margin: '0 auto' }} />
-            <div className="metric-value text-green">KES {totalEarnings}</div>
-            <div className="metric-label">Revenue</div>
+            <div className="metric-value text-green">KES {totalCollectedRevenue.toLocaleString()}</div>
+            <div className="metric-label">Collected</div>
           </div>
           <div className="metric-card">
-            <Users size={18} className="text-gray" style={{ margin: '0 auto' }} />
-            <div className="metric-value">{activeRiders}</div>
-            <div className="metric-label">Active Fleet</div>
+            <Clock size={18} style={{ margin: '0 auto', color: '#F59E0B' }} />
+            <div className="metric-value" style={{ color: '#F59E0B' }}>KES {totalPendingRevenue.toLocaleString()}</div>
+            <div className="metric-label">Pending</div>
+          </div>
+          <div className="metric-card">
+            <Receipt size={18} className="text-blue" style={{ margin: '0 auto' }} />
+            <div className="metric-value text-blue">{totalPaidOrders} / {orders.length}</div>
+            <div className="metric-label">Paid Orders</div>
           </div>
         </div>
 
@@ -499,11 +775,10 @@ export default function CEOAdminPanel() {
                 <button 
                   type="button" 
                   className="btn btn-success"
-                  onClick={() => triggerMpesa(null)}
-                  title="Trigger M-Pesa STK Push"
+                  onClick={openDispatchFormStkModal}
+                  title="Verify & Send M-Pesa STK Prompt"
                 >
-                  <Smartphone size={15} /> 
-                  {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent' : 'Pay'}
+                  <Smartphone size={15} /> Pay
                 </button>
               </div>
             </form>
@@ -664,19 +939,58 @@ export default function CEOAdminPanel() {
 
         {/* Active Orders Section */}
         <div>
-          <div className="card-header" style={{ marginBottom: '0.75rem' }}>
-            <Activity size={18} /> Active Orders ({orders.filter(o => o.status !== 'delivered').length})
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div className="card-header" style={{ margin: 0 }}>
+              <Activity size={18} /> Active Orders ({filteredActiveOrders.length})
+            </div>
           </div>
 
-          {orders.map(order => {
-            if (order.status === 'delivered') return null;
+          {/* Payment Status Filter Pills */}
+          <div className="filter-pills">
+            <button 
+              type="button" 
+              className={`filter-pill ${orderPaymentFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setOrderPaymentFilter('all')}
+            >
+              All ({orders.filter(o => o.status !== 'delivered').length})
+            </button>
+            <button 
+              type="button" 
+              className={`filter-pill ${orderPaymentFilter === 'unpaid' ? 'active' : ''}`}
+              onClick={() => setOrderPaymentFilter('unpaid')}
+            >
+              Unpaid ({orders.filter(o => o.status !== 'delivered' && o.status !== 'paid' && !o.mpesa_receipt).length})
+            </button>
+            <button 
+              type="button" 
+              className={`filter-pill ${orderPaymentFilter === 'paid' ? 'active' : ''}`}
+              onClick={() => setOrderPaymentFilter('paid')}
+            >
+              Paid ({orders.filter(o => o.status !== 'delivered' && (o.status === 'paid' || !!o.mpesa_receipt)).length})
+            </button>
+          </div>
+
+          {filteredActiveOrders.map(order => {
+            const isPaid = order.status === 'paid' || !!order.mpesa_receipt;
+            
             return (
-              <div key={order.id} className="order-card-item">
+              <div key={order.id} className="order-card-item" style={{ borderLeftColor: isPaid ? '#10B981' : 'var(--secondary-color)' }}>
                 <div className="flex justify-between items-center mb-1">
                   <strong style={{ fontSize: '0.92rem' }}>{order.customer_name}</strong>
-                  <span className={`status-badge status-${order.status === 'paid' ? 'online' : 'busy'}`}>
-                    {order.status}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {isPaid ? (
+                      <span className="badge-paid">
+                        <CheckCircle size={11} /> PAID
+                      </span>
+                    ) : (
+                      <span className="badge-unpaid">
+                        <Clock size={11} /> UNPAID
+                      </span>
+                    )}
+                    <span className={`status-badge status-${order.status === 'paid' ? 'online' : 'busy'}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                      {order.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', margin: '4px 0' }}>
@@ -692,7 +1006,21 @@ export default function CEOAdminPanel() {
                   </span>
                 </div>
 
-                {/* Customer Contact Bar (Call, WhatsApp, Copy, Pay) */}
+                {/* M-Pesa Receipt if paid */}
+                {order.mpesa_receipt && (
+                  <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span 
+                      className="receipt-tag" 
+                      onClick={() => copyToClipboard(order.mpesa_receipt, order.id + '-rcpt')}
+                      title="Click to copy receipt"
+                    >
+                      <Receipt size={11} /> Receipt: {order.mpesa_receipt}
+                      {copiedOrderId === order.id + '-rcpt' && <Check size={11} color="#16A34A" />}
+                    </span>
+                  </div>
+                )}
+
+                {/* Customer Contact & Payment Action Bar */}
                 <div className="order-action-bar">
                   <span className="order-phone-text">{order.customer_phone || 'No phone'}</span>
                   <div className="action-btn-group">
@@ -720,16 +1048,22 @@ export default function CEOAdminPanel() {
                     >
                       {copiedOrderId === order.id ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
                     </button>
-                    {order.status !== 'paid' && (
+                    
+                    {/* Trigger STK Push modal if not yet paid */}
+                    {!isPaid ? (
                       <button 
                         type="button"
-                        onClick={() => triggerMpesa(order.id)} 
+                        onClick={() => openStkModal(order)} 
                         className="btn btn-success" 
-                        style={{ padding: '2px 8px', fontSize: '0.75rem', height: '28px' }}
-                        title="M-Pesa STK"
+                        style={{ padding: '2px 8px', fontSize: '0.75rem', height: '28px', gap: '4px' }}
+                        title="Send M-Pesa STK push to customer phone"
                       >
-                        <Smartphone size={12} /> Pay
+                        <Smartphone size={12} /> STK Push
                       </button>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#16A34A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', marginLeft: '4px' }}>
+                        <CheckCircle size={13} /> Paid
+                      </span>
                     )}
                   </div>
                 </div>
@@ -737,9 +1071,9 @@ export default function CEOAdminPanel() {
             );
           })}
 
-          {orders.filter(o => o.status !== 'delivered').length === 0 && (
+          {filteredActiveOrders.length === 0 && (
             <div className="card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-              No active orders at the moment.
+              No {orderPaymentFilter !== 'all' ? orderPaymentFilter : 'active'} orders at the moment.
             </div>
           )}
         </div>
@@ -748,7 +1082,7 @@ export default function CEOAdminPanel() {
       {/* Right Column: Live Interactive Map */}
       <div className="map-container">
         <button className="floating-finance-btn" onClick={() => setActiveTab('finance')}>
-          <LayoutDashboard size={16} /> Finance
+          <LayoutDashboard size={16} /> Finance Dashboard
         </button>
 
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
