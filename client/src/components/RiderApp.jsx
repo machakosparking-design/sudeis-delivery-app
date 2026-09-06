@@ -496,6 +496,20 @@ export default function RiderApp({ riderCode }) {
   const targetPin = activeOrder ? (activeOrder.delivery_pin || dropoffInfo.pin) : null;
   const isPrepaid = activeOrder && (activeOrder.status === 'paid' || !!activeOrder.mpesa_receipt);
 
+  // Helper to accurately resolve the current delivery lifecycle phase
+  const getDeliveryPhase = (order) => {
+    if (!order) return 'idle';
+    const s = (order.status || '').toLowerCase();
+    if (s === 'delivered') return 'delivered';
+    if (s === 'arrived') return 'arrived';
+    if (s === 'picked_up') return 'picked_up';
+    if (order.arrived_at) return 'arrived';
+    if (s === 'accepted' || s === 'paid') return 'accepted';
+    return 'accepted';
+  };
+
+  const deliveryPhase = getDeliveryPhase(activeOrder);
+
   // Filter Historical Orders
   const filteredHistory = historicalOrders.filter(order => {
     if (historyFilter === 'today') {
@@ -959,31 +973,31 @@ export default function RiderApp({ riderCode }) {
               </div>
 
               {/* Step 2: Pickup */}
-              <div className={`stepper-step ${activeOrder.status === 'accepted' ? 'active' : 'completed'}`}>
+              <div className={`stepper-step ${deliveryPhase === 'accepted' ? 'active' : 'completed'}`}>
                 <div className="stepper-bubble">
-                  {activeOrder.status === 'accepted' ? '2' : <Check size={12} />}
+                  {deliveryPhase === 'accepted' ? '2' : <Check size={12} />}
                 </div>
                 <div className="stepper-label">Pickup</div>
               </div>
 
               {/* Step 3: Transit */}
-              <div className={`stepper-step ${activeOrder.status === 'picked_up' ? 'active' : activeOrder.status === 'arrived' ? 'completed' : ''}`}>
+              <div className={`stepper-step ${deliveryPhase === 'picked_up' ? 'active' : (deliveryPhase === 'arrived' || deliveryPhase === 'delivered') ? 'completed' : ''}`}>
                 <div className="stepper-bubble">
-                  {activeOrder.status === 'arrived' ? <Check size={12} /> : '3'}
+                  {(deliveryPhase === 'arrived' || deliveryPhase === 'delivered') ? <Check size={12} /> : '3'}
                 </div>
                 <div className="stepper-label">Transit</div>
               </div>
 
               {/* Step 4: Arrived */}
-              <div className={`stepper-step ${activeOrder.status === 'arrived' ? 'active' : ''}`}>
+              <div className={`stepper-step ${deliveryPhase === 'arrived' ? 'active' : deliveryPhase === 'delivered' ? 'completed' : ''}`}>
                 <div className="stepper-bubble">
-                  4
+                  {deliveryPhase === 'delivered' ? <Check size={12} /> : '4'}
                 </div>
                 <div className="stepper-label">Arrived</div>
               </div>
 
               {/* Step 5: Delivered */}
-              <div className="stepper-step">
+              <div className={`stepper-step ${deliveryPhase === 'delivered' ? 'completed' : ''}`}>
                 <div className="stepper-bubble">
                   5
                 </div>
@@ -992,7 +1006,7 @@ export default function RiderApp({ riderCode }) {
             </div>
 
             {/* Dynamic Mission Action Banners */}
-            {activeOrder.status === 'accepted' && (
+            {deliveryPhase === 'accepted' && (
               <div className="mission-action-banner">
                 <div className="mission-top-row">
                   <span className="mission-phase-badge">MISSION STEP 1: PICKUP</span>
@@ -1013,7 +1027,7 @@ export default function RiderApp({ riderCode }) {
               </div>
             )}
 
-            {activeOrder.status === 'picked_up' && (
+            {deliveryPhase === 'picked_up' && (
               <div className="mission-action-banner">
                 <div className="mission-top-row">
                   <span className="mission-phase-badge" style={{ background: '#10B981' }}>
@@ -1037,7 +1051,7 @@ export default function RiderApp({ riderCode }) {
               </div>
             )}
 
-            {activeOrder.status === 'arrived' && (
+            {deliveryPhase === 'arrived' && (
               <div className="arrival-alert-banner">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 800, background: '#FFFFFF', color: '#0284C7', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -1216,17 +1230,40 @@ export default function RiderApp({ riderCode }) {
             )}
 
             {/* Primary Action Buttons depending on Phase */}
-            {activeOrder.status === 'accepted' && (
-              <button 
-                onClick={handleMarkPickedUp}
-                disabled={isProcessingAction}
-                className="btn-trip-lifecycle pickup"
-              >
-                <Package size={22} /> CONFIRM PACKAGE PICKED UP
-              </button>
+            {deliveryPhase === 'accepted' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <button 
+                  onClick={handleMarkPickedUp}
+                  disabled={isProcessingAction}
+                  className="btn-trip-lifecycle pickup"
+                >
+                  <Package size={22} /> CONFIRM PACKAGE PICKED UP
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMarkArrived}
+                  disabled={isProcessingAction}
+                  style={{
+                    background: '#F0F9FF',
+                    border: '1.5px dashed #0284C7',
+                    color: '#0284C7',
+                    padding: '0.75rem',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <MapPin size={16} /> Already have parcel? Skip to "Arrived at Destination"
+                </button>
+              </div>
             )}
 
-            {activeOrder.status === 'picked_up' && (
+            {deliveryPhase === 'picked_up' && (
               <button 
                 onClick={handleMarkArrived}
                 disabled={isProcessingAction}
@@ -1251,7 +1288,7 @@ export default function RiderApp({ riderCode }) {
               </button>
             )}
 
-            {activeOrder.status === 'arrived' && (
+            {deliveryPhase === 'arrived' && (
               <button 
                 onClick={() => setIsCompletingModal(true)}
                 disabled={isProcessingAction}
