@@ -223,22 +223,39 @@ export default function CEOAdminPanel() {
 
     // Active polling every 2.5s for the order status
     const pollTimer = setInterval(async () => {
-      if (!stkModalData.orderId) return;
+      let orderData = null;
 
-      const { data } = await supabase
-        .from('orders')
-        .select('status, mpesa_receipt, fee')
-        .eq('id', stkModalData.orderId)
-        .maybeSingle();
+      if (stkModalData.orderId) {
+        const { data } = await supabase
+          .from('orders')
+          .select('id, status, mpesa_receipt, fee')
+          .eq('id', stkModalData.orderId)
+          .maybeSingle();
+        orderData = data;
+      }
 
-      if (data && (data.status === 'paid' || data.mpesa_receipt)) {
+      if (!orderData && stkModalData.phone) {
+        const cleanPhone = stkModalData.phone.replace(/[^0-9]/g, '');
+        const altPhone = cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : ('0' + cleanPhone.slice(3));
+        const { data } = await supabase
+          .from('orders')
+          .select('id, status, mpesa_receipt, fee')
+          .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${altPhone}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        orderData = data;
+      }
+
+      if (orderData && (orderData.status === 'paid' || orderData.mpesa_receipt)) {
         clearInterval(pollTimer);
         clearInterval(countdownTimer);
         setStkStatus('paid');
         setStkPaidDetails({
-          receipt: data.mpesa_receipt || 'Confirmed',
-          amount: data.fee
+          receipt: orderData.mpesa_receipt || 'Confirmed',
+          amount: orderData.fee
         });
+        setOrders(prev => prev.map(o => o.id === orderData.id ? { ...o, status: 'paid', mpesa_receipt: orderData.mpesa_receipt } : o));
       }
     }, 2500);
 
@@ -246,7 +263,7 @@ export default function CEOAdminPanel() {
       clearInterval(countdownTimer);
       clearInterval(pollTimer);
     };
-  }, [stkStatus, stkModalData.orderId]);
+  }, [stkStatus, stkModalData.orderId, stkModalData.phone]);
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -386,19 +403,56 @@ export default function CEOAdminPanel() {
     setStkMessage('');
   };
 
-  // ── Open STK Modal from Dispatch Form ─────────────────────────────────────
-  const openDispatchFormStkModal = () => {
-    if (!formData.customerPhone || !formData.fee) {
-      alert("Please enter customer phone and fee in the dispatch form first.");
+  // ── Open STK Modal from Dispatch Form (Creates Order First) ──────────────
+  const openDispatchFormStkModal = async () => {
+    if (!formData.customerName || !formData.customerPhone || !formData.fee) {
+      alert("Please enter Customer Name, Phone, and Fee in the dispatch form first.");
       return;
     }
+
+    // 1. Create order in the database first so the payment is linked to a real order!
+    const pickupLat = formData.pickupLat || -1.2921 + (Math.random() * 0.01 - 0.005);
+    const pickupLng = formData.pickupLng || 36.8219 + (Math.random() * 0.01 - 0.005);
+    const dropoffLat = formData.dropoffLat || -1.2921 + (Math.random() * 0.01 - 0.005);
+    const dropoffLng = formData.dropoffLng || 36.8219 + (Math.random() * 0.01 - 0.005);
+
+    const { data, error } = await supabase.from('orders').insert([{
+      order_number: `ORD-${Date.now()}`,
+      customer_name: formData.customerName,
+      customer_phone: formData.customerPhone,
+      pickup_address: formData.pickup || 'Pickup',
+      pickup_lat: pickupLat,
+      pickup_lng: pickupLng,
+      dropoff_address: formData.dropoff || 'Delivery',
+      dropoff_lat: dropoffLat,
+      dropoff_lng: dropoffLng,
+      fee: parseFloat(formData.fee),
+      status: 'pending'
+    }]).select();
+
+    if (error || !data || data.length === 0) {
+      alert("Error creating order: " + (error?.message || 'Unknown error'));
+      return;
+    }
+
+    const createdOrder = data[0];
+
+    // Clear form
+    setFormData({ 
+      customerName: '', customerPhone: '', 
+      pickup: '', pickupLat: null, pickupLng: null,
+      dropoff: '', dropoffLat: null, dropoffLng: null, 
+      fee: '' 
+    });
+
+    // 2. Open modal with real order details!
     setStkModalData({
       isOpen: true,
-      orderId: null,
-      orderNumber: 'New Dispatch',
-      customerName: formData.customerName || 'Customer',
-      amount: formData.fee,
-      phone: formData.customerPhone
+      orderId: createdOrder.id,
+      orderNumber: createdOrder.order_number,
+      customerName: createdOrder.customer_name,
+      amount: createdOrder.fee,
+      phone: createdOrder.customer_phone
     });
     setStkStatus(null);
     setStkMessage('');
@@ -451,26 +505,44 @@ export default function CEOAdminPanel() {
 
   // ── Manual Payment Confirmation ───────────────────────────────────────────
   const handleManualPaymentConfirm = async (orderId) => {
-    if (!orderId) return;
-    const receipt = window.prompt("Enter M-Pesa Receipt Code or reference (or leave blank for CASH):", "CASH");
+    let targetId = orderId;
+
+    if (!targetId && stkModalData.phone) {
+      const cleanPhone = stkModalData.phone.replace(/[^0-9]/g, '');
+      const altPhone = cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : ('0' + cleanPhone.slice(3));
+      const { data } = await supabase
+        .from('orders')
+        .select('id')
+        .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${altPhone}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      targetId = data?.id;
+    }
+
+    if (!targetId) {
+      alert("No order found to update. Please select or dispatch an order first.");
+      return;
+    }
+
+    const receipt = window.prompt("Enter M-Pesa Receipt Code (from customer's SMS, e.g. NLX8932J1):", "M-PESA");
     if (receipt === null) return;
 
     const { error } = await supabase
       .from('orders')
       .update({ 
         status: 'paid', 
-        mpesa_receipt: receipt.trim() || 'CASH' 
+        mpesa_receipt: receipt.trim() || 'M-PESA' 
       })
-      .eq('id', orderId);
+      .eq('id', targetId);
 
     if (!error) {
-      if (stkModalData.isOpen && stkModalData.orderId === orderId) {
-        setStkStatus('paid');
-        setStkPaidDetails({
-          receipt: receipt.trim() || 'CASH',
-          amount: stkModalData.amount
-        });
-      }
+      setStkStatus('paid');
+      setStkPaidDetails({
+        receipt: receipt.trim() || 'M-PESA',
+        amount: stkModalData.amount
+      });
+      setOrders(prev => prev.map(o => o.id === targetId ? { ...o, status: 'paid', mpesa_receipt: receipt.trim() || 'M-PESA' } : o));
     } else {
       alert("Error marking order as paid: " + error.message);
     }
@@ -478,21 +550,41 @@ export default function CEOAdminPanel() {
 
   // ── Check Payment Status On Demand ────────────────────────────────────────
   const handleManualCheck = async () => {
-    if (!stkModalData.orderId) return;
-    const { data } = await supabase
-      .from('orders')
-      .select('status, mpesa_receipt, fee')
-      .eq('id', stkModalData.orderId)
-      .maybeSingle();
+    let orderData = null;
 
-    if (data && (data.status === 'paid' || data.mpesa_receipt)) {
+    if (stkModalData.orderId) {
+      const { data } = await supabase
+        .from('orders')
+        .select('id, status, mpesa_receipt, fee')
+        .eq('id', stkModalData.orderId)
+        .maybeSingle();
+      orderData = data;
+    }
+
+    // Fallback: check most recent order matching the phone number
+    if (!orderData && stkModalData.phone) {
+      const cleanPhone = stkModalData.phone.replace(/[^0-9]/g, '');
+      const altPhone = cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : ('0' + cleanPhone.slice(3));
+      const { data } = await supabase
+        .from('orders')
+        .select('id, status, mpesa_receipt, fee')
+        .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${altPhone}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      orderData = data;
+    }
+
+    if (orderData && (orderData.status === 'paid' || orderData.mpesa_receipt)) {
       setStkStatus('paid');
       setStkPaidDetails({
-        receipt: data.mpesa_receipt || 'Confirmed',
-        amount: data.fee
+        receipt: orderData.mpesa_receipt || 'Confirmed',
+        amount: orderData.fee
       });
+      // Refresh local orders list
+      setOrders(prev => prev.map(o => o.id === orderData.id ? { ...o, status: 'paid', mpesa_receipt: orderData.mpesa_receipt } : o));
     } else {
-      alert("Payment has not been confirmed yet. Please wait for customer to enter PIN.");
+      alert("Payment has not been confirmed yet. Please wait a moment or click 'Customer Paid Cash / Manual Confirm' to manually record receipt.");
     }
   };
 
