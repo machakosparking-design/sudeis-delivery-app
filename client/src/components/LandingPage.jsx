@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './LandingPage.css';
 import FalconIcon from './FalconIcon';
 import { 
+  Truck,
   Package, 
   ShieldCheck, 
   Clock, 
@@ -120,6 +121,57 @@ export default function LandingPage({ onGoToApp }) {
 
       {/* Hero Section */}
       <section className="hero-section">
+        {/* Live Animated Falcon Sky Backdrop */}
+        <div className="hero-sky-backdrop" aria-hidden="true">
+          {/* Main Soaring Falcon */}
+          <div className="falcon-flight-track main-falcon">
+            <div className="falcon-vapor-trail" />
+            <div className="falcon-body-wrap">
+              <svg viewBox="0 0 100 65" className="falcon-live-svg">
+                {/* Left Wing */}
+                <g className="falcon-wing-left">
+                  <path d="M48 28 C35 12 18 2 2 0 C8 10 18 20 35 28 C26 31 16 32 8 32 C18 36 30 36 45 32 Z" fill="#1E3A8A" />
+                  <path d="M45 28 C32 15 18 6 5 4 C10 12 20 20 35 27 Z" fill="#2563EB" opacity="0.75" />
+                </g>
+                {/* Torso, Head, Hooked Beak, Tail */}
+                <path d="M78 28 C85 27 92 25 98 28 C96 32 90 34 84 34 L78 35 C70 42 58 45 42 42 L25 58 L32 45 C28 44 24 43 20 42 L38 34 L55 33 C64 33 72 31 78 28 Z" fill="#0F172A" />
+                {/* Keen Raptor Eye */}
+                <circle cx="88" cy="29" r="1.8" fill="#F59E0B" />
+                <circle cx="88.5" cy="28.8" r="0.8" fill="#000000" />
+                {/* Golden Curved Beak */}
+                <path d="M94 28 C97 27 100 29 97 32 C95 33 93 31 94 28 Z" fill="#F59E0B" />
+                {/* Right Wing */}
+                <g className="falcon-wing-right">
+                  <path d="M52 28 C65 14 80 4 94 2 C88 12 78 22 62 28 C70 31 78 32 85 32 C75 36 64 36 50 32 Z" fill="#1D4ED8" />
+                  <path d="M54 27 C66 16 78 8 90 6 C85 14 75 22 62 27 Z" fill="#3B82F6" opacity="0.65" />
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          {/* Distant Escort Falcon 1 */}
+          <div className="falcon-flight-track distant-falcon-1">
+            <div className="falcon-body-wrap">
+              <svg viewBox="0 0 100 65" className="falcon-live-svg">
+                <path d="M48 28 C35 12 18 2 2 0 C8 10 18 20 35 28 C26 31 16 32 8 32 C18 36 30 36 45 32 Z" fill="#1E293B" />
+                <path d="M78 28 C85 27 92 25 98 28 C96 32 90 34 84 34 L78 35 C70 42 58 45 42 42 L25 58 L32 45 C28 44 24 43 20 42 L38 34 L55 33 C64 33 72 31 78 28 Z" fill="#0F172A" />
+                <path d="M52 28 C65 14 80 4 94 2 C88 12 78 22 62 28 C70 31 78 32 85 32 C75 36 64 36 50 32 Z" fill="#1E293B" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Distant Escort Falcon 2 */}
+          <div className="falcon-flight-track distant-falcon-2">
+            <div className="falcon-body-wrap">
+              <svg viewBox="0 0 100 65" className="falcon-live-svg">
+                <path d="M48 28 C35 12 18 2 2 0 C8 10 18 20 35 28 C26 31 16 32 8 32 C18 36 30 36 45 32 Z" fill="#334155" />
+                <path d="M78 28 C85 27 92 25 98 28 C96 32 90 34 84 34 L78 35 C70 42 58 45 42 42 L25 58 L32 45 C28 44 24 43 20 42 L38 34 L55 33 C64 33 72 31 78 28 Z" fill="#1E293B" />
+                <path d="M52 28 C65 14 80 4 94 2 C88 12 78 22 62 28 C70 31 78 32 85 32 C75 36 64 36 50 32 Z" fill="#334155" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
         <div className="hero-container">
           <div className="hero-content">
             <div className="hero-badge">
@@ -160,8 +212,8 @@ export default function LandingPage({ onGoToApp }) {
                 <span className="live-indicator"></span> Live Delivery Active
               </div>
               <div className="visual-illustration">
-                <div className="delivery-falcon-circle">
-                  <FalconIcon size={48} className="text-blue" />
+                <div className="delivery-truck-circle">
+                  <Truck size={48} className="text-blue" />
                 </div>
                 <div className="route-line">
                   <div className="route-dot start"></div>

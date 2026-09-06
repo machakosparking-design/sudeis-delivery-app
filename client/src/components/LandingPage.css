@@ -166,12 +166,206 @@
   cursor: pointer;
 }
 
-/* ----------------- Hero Section ----------------- */
+/* ----------------- Hero Section with Scenic Background & Live Falcon Animation ----------------- */
 .hero-section {
-  padding: 4.5rem 1.5rem 3rem;
-  background: linear-gradient(180deg, #FFFFFF 0%, #F1F5F9 100%);
+  padding: 4.5rem 1.5rem 3.5rem;
+  background-color: #F8FAFC;
+  background-image: 
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(248, 250, 252, 0.70) 45%, rgba(241, 245, 249, 0.94) 100%),
+    url('../assets/falcon_hero_bg.jpg');
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
   position: relative;
+  overflow: hidden;
 }
+
+/* Sky Backdrop for Live Animated Falcons */
+.hero-sky-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* Main Soaring Falcon */
+.falcon-flight-track.main-falcon {
+  position: absolute;
+  top: 14%;
+  left: -140px;
+  width: 110px;
+  height: 72px;
+  animation: falconSoarAcross 20s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  filter: drop-shadow(0 12px 20px rgba(15, 23, 42, 0.22));
+}
+
+.falcon-body-wrap {
+  width: 100%;
+  height: 100%;
+  animation: falconGlideMotion 4s ease-in-out infinite alternate;
+  transform-origin: center center;
+}
+
+.falcon-live-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Wing Flapping & Aerodynamic Thermal Glide */
+.falcon-wing-left {
+  transform-origin: 48px 28px;
+  animation: wingBeatLeft 1.3s ease-in-out infinite;
+}
+
+.falcon-wing-right {
+  transform-origin: 52px 28px;
+  animation: wingBeatRight 1.3s ease-in-out infinite;
+}
+
+/* Aerodynamic Speed Vapor Trail */
+.falcon-vapor-trail {
+  position: absolute;
+  right: 80%;
+  top: 48%;
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.6), transparent);
+  border-radius: 2px;
+  transform: rotate(-3deg);
+  filter: blur(1px);
+  animation: vaporPulse 1.3s ease-in-out infinite;
+}
+
+/* Distant Falcons Soaring High in Horizon Thermals */
+.falcon-flight-track.distant-falcon-1 {
+  position: absolute;
+  top: 8%;
+  left: -70px;
+  width: 46px;
+  height: 30px;
+  opacity: 0.55;
+  animation: falconSoarHigh 28s linear 6s infinite;
+  filter: blur(0.3px);
+}
+
+.falcon-flight-track.distant-falcon-2 {
+  position: absolute;
+  top: 25%;
+  left: -60px;
+  width: 36px;
+  height: 24px;
+  opacity: 0.42;
+  animation: falconSoarHigh 24s linear 14s infinite;
+  filter: blur(0.5px);
+}
+
+@keyframes falconSoarAcross {
+  0% {
+    transform: translate3d(-120px, 30px, 0) scale(0.7) rotate(6deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate3d(35vw, 10px, 0) scale(1) rotate(-3deg);
+  }
+  60% {
+    transform: translate3d(65vw, 55px, 0) scale(1.05) rotate(4deg);
+  }
+  85% {
+    opacity: 1;
+    transform: translate3d(92vw, 15px, 0) scale(0.95) rotate(-2deg);
+  }
+  100% {
+    transform: translate3d(115vw, -30px, 0) scale(0.8) rotate(-6deg);
+    opacity: 0;
+  }
+}
+
+@keyframes falconSoarHigh {
+  0% {
+    transform: translate3d(-60px, 20px, 0) scale(0.8) rotate(3deg);
+    opacity: 0;
+  }
+  10% { opacity: 0.55; }
+  50% {
+    transform: translate3d(50vw, -15px, 0) scale(1) rotate(-2deg);
+  }
+  90% { opacity: 0.55; }
+  100% {
+    transform: translate3d(110vw, 25px, 0) scale(0.7) rotate(4deg);
+    opacity: 0;
+  }
+}
+
+@keyframes falconGlideMotion {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-8px) rotate(-3deg);
+  }
+  70% {
+    transform: translateY(6px) rotate(4deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes wingBeatLeft {
+  0%, 100% {
+    transform: scaleY(1) rotate(0deg);
+  }
+  12% {
+    transform: scaleY(0.35) translateY(7px) rotate(-12deg);
+  }
+  25% {
+    transform: scaleY(1.1) translateY(-3px) rotate(7deg);
+  }
+  38% {
+    transform: scaleY(0.4) translateY(5px) rotate(-9deg);
+  }
+  50% {
+    transform: scaleY(1.05) translateY(-2px) rotate(3deg);
+  }
+  65%, 90% {
+    transform: scaleY(0.95) translateY(0) rotate(2deg);
+  }
+}
+
+@keyframes wingBeatRight {
+  0%, 100% {
+    transform: scaleY(1) rotate(0deg);
+  }
+  12% {
+    transform: scaleY(0.35) translateY(7px) rotate(-12deg);
+  }
+  25% {
+    transform: scaleY(1.1) translateY(-3px) rotate(7deg);
+  }
+  38% {
+    transform: scaleY(0.4) translateY(5px) rotate(-9deg);
+  }
+  50% {
+    transform: scaleY(1.05) translateY(-2px) rotate(3deg);
+  }
+  65%, 90% {
+    transform: scaleY(0.95) translateY(0) rotate(2deg);
+  }
+}
+
+@keyframes vaporPulse {
+  0%, 100% { opacity: 0.2; transform: scaleX(0.8); }
+  50% { opacity: 0.7; transform: scaleX(1.2); }
+}
+
 .hero-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -179,6 +373,8 @@
   grid-template-columns: 1.2fr 0.8fr;
   gap: 3.5rem;
   align-items: center;
+  position: relative;
+  z-index: 2;
 }
 .hero-badge {
   display: inline-flex;
@@ -289,11 +485,13 @@
   justify-content: center;
 }
 .visual-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: var(--radius-lg);
   padding: 2rem;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid #E2E8F0;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   width: 100%;
   max-width: 400px;
   position: relative;
