@@ -53,29 +53,38 @@ CREATE INDEX IF NOT EXISTS idx_orders_mpesa_checkout_id ON public.orders(mpesa_c
 --     WHERE rider_code = 'rider_3';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 4. Row Level Security — restrict riders from reading other riders' rows
+-- 4. Row Level Security — Fixed non-recursive policies
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.riders ENABLE ROW LEVEL SECURITY;
 
--- Drop policies first so this script is safe to re-run
+-- Drop previous policies
 DROP POLICY IF EXISTS riders_select_policy ON public.riders;
 DROP POLICY IF EXISTS riders_update_policy ON public.riders;
 
+-- Helper function: checks if user is CEO without triggering RLS recursion
+CREATE OR REPLACE FUNCTION public.is_ceo()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.riders
+    WHERE auth_user_id = auth.uid() AND role = 'ceo'
+  );
+$$;
+
+-- Allow authenticated users to view riders (needed for fleet map & auth profile lookup)
 CREATE POLICY riders_select_policy ON public.riders
-  FOR SELECT USING (
-    auth_user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.riders r
-      WHERE r.auth_user_id = auth.uid() AND r.role = 'ceo'
-    )
+  FOR SELECT TO authenticated
+  USING (true);
+
+-- Allow riders to update their own row (status, GPS), or CEO to update any row
+CREATE POLICY riders_update_policy ON public.riders
+  FOR UPDATE TO authenticated
+  USING (
+    auth_user_id = auth.uid() OR public.is_ceo()
   );
 
-CREATE POLICY riders_update_policy ON public.riders
-  FOR UPDATE USING (
-    auth_user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.riders r
-      WHERE r.auth_user_id = auth.uid() AND r.role = 'ceo'
-    )
-  );
 

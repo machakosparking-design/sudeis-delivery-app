@@ -4,7 +4,8 @@ import L from 'leaflet';
 import { 
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
-  ListPlus, ListChecks, Layers, Phone, MessageCircle, Copy, Check 
+  ListPlus, ListChecks, Layers, Phone, MessageCircle, Copy, Check,
+  ArrowRight
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -112,6 +113,7 @@ export default function CEOAdminPanel() {
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [copiedOrderId, setCopiedOrderId] = useState(null);
   const [activeTab, setActiveTab] = useState('dispatch'); // 'dispatch' or 'transactions'
+  const [activeSidebarTab, setActiveSidebarTab] = useState('dispatch'); // 'dispatch' or 'orders'
   const [mapClickMode, setMapClickMode] = useState(null); // 'pickup', 'dropoff', null
 
   useEffect(() => {
@@ -320,62 +322,66 @@ export default function CEOAdminPanel() {
 
   if (activeTab === 'transactions') {
     return (
-      <div className="p-6 bg-gray-50 h-full overflow-y-auto w-full absolute top-0 left-0" style={{ zIndex: 1000, backgroundColor: '#F8FAFC' }}>
+      <div className="p-6 bg-gray-50 h-full overflow-y-auto w-full absolute top-0 left-0 z-50">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-primary-color">Financial Dashboard</h1>
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Financial Dashboard</h1>
             <div className="flex gap-4">
-              <button className="btn btn-outline" onClick={() => setActiveTab('dispatch')}>
-                <MapIcon size={18} className="inline mr-2" /> Live Map
+              <button className="bg-white hover:bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 font-bold transition-all flex items-center gap-2" onClick={() => setActiveTab('dispatch')}>
+                <MapIcon size={18} className="text-blue-600" /> Live Map
               </button>
-              <button className="btn btn-primary">
-                <LayoutDashboard size={18} className="inline mr-2" /> Finance
+              <button className="bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-md font-bold flex items-center gap-2">
+                <LayoutDashboard size={18} /> Finance
               </button>
             </div>
           </div>
 
           {/* Metrics */}
           <div className="grid grid-cols-3 gap-6 mb-8">
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#2563EB' }}>
-              <div className="text-gray mb-1 font-semibold">Total Gross Revenue</div>
-              <div className="text-4xl font-bold text-gray-800">KES {totalEarnings}</div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-blue-600">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Gross Revenue</div>
+              <div className="text-4xl font-black text-gray-900">KES {totalEarnings}</div>
             </div>
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#10B981' }}>
-              <div className="text-gray mb-1 font-semibold">Total Deliveries</div>
-              <div className="text-4xl font-bold text-gray-800">{totalOrders}</div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Deliveries</div>
+              <div className="text-4xl font-black text-gray-900">{totalOrders}</div>
             </div>
-            <div className="card p-6 border-l-4" style={{ borderLeftColor: '#F59E0B' }}>
-              <div className="text-gray mb-1 font-semibold">Active Fleet</div>
-              <div className="text-4xl font-bold text-gray-800">{activeRiders} / 3</div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Active Fleet</div>
+              <div className="text-4xl font-black text-gray-900">{activeRiders} / {Object.keys(riders).length || 3}</div>
             </div>
           </div>
 
           {/* Charts */}
           <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="card p-6">
-              <h3 className="font-bold text-lg mb-6">Gross Revenue by Rider</h3>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-gray-900 text-lg mb-6 flex items-center gap-2">
+                <DollarSign size={20} className="text-blue-600"/> Gross Revenue by Rider
+              </h3>
               <div style={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
                   <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `KES ${value}`} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="grossRevenue" fill="#2563EB" radius={[4, 4, 0, 0]} barSize={40} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} tickFormatter={(value) => `KES ${value}`} />
+                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                    <Bar dataKey="grossRevenue" fill="#2563EB" radius={[6, 6, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="card p-6">
-              <h3 className="font-bold text-lg mb-6">Completed Orders by Rider</h3>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-gray-900 text-lg mb-6 flex items-center gap-2">
+                <Activity size={20} className="text-green-500"/> Completed Orders by Rider
+              </h3>
               <div style={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
                   <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="orders" fill="#10B981" radius={[4, 4, 0, 0]} barSize={40} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
+                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                    <Bar dataKey="orders" fill="#10B981" radius={[6, 6, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -383,39 +389,41 @@ export default function CEOAdminPanel() {
           </div>
 
           {/* Order History */}
-          <div className="card p-6">
-            <h3 className="font-bold text-lg mb-4">Historical Transactions</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 className="font-bold text-gray-900 text-lg mb-4">Historical Transactions</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b-2 border-gray-100 text-gray-500">
-                    <th className="p-3 font-semibold">Order #</th>
-                    <th className="p-3 font-semibold">Customer</th>
-                    <th className="p-3 font-semibold">Route</th>
-                    <th className="p-3 font-semibold">Rider</th>
-                    <th className="p-3 font-semibold">Gross Fee</th>
-                    <th className="p-3 font-semibold">Date</th>
+                  <tr className="border-b-2 border-gray-100 text-gray-400 text-xs uppercase tracking-wider">
+                    <th className="p-3 font-bold">Order #</th>
+                    <th className="p-3 font-bold">Customer</th>
+                    <th className="p-3 font-bold">Route</th>
+                    <th className="p-3 font-bold">Rider</th>
+                    <th className="p-3 font-bold">Gross Fee</th>
+                    <th className="p-3 font-bold">Date</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-sm">
                   {orders.filter(o => o.status === 'delivered').map(order => (
                     <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="p-3 font-medium text-gray-700">{order.order_number}</td>
-                      <td className="p-3">{order.customer_name}</td>
-                      <td className="p-3 text-sm text-gray-500">
-                        <div className="truncate max-w-xs">{order.pickup_address} → {order.dropoff_address}</div>
+                      <td className="p-3 font-mono font-medium text-gray-500">{order.order_number}</td>
+                      <td className="p-3 font-bold text-gray-900">{order.customer_name}</td>
+                      <td className="p-3 text-gray-600">
+                        <div className="truncate max-w-xs flex items-center gap-2">
+                          <MapPin size={14} className="text-gray-400" /> {order.pickup_address} <ArrowRight size={14} className="text-gray-300" /> {order.dropoff_address}
+                        </div>
                       </td>
                       <td className="p-3">
-                        <span className="bg-gray-100 px-3 py-1 rounded-full text-sm font-medium">
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
                           {riders[order.assigned_rider_id]?.name || 'Unknown'}
                         </span>
                       </td>
-                      <td className="p-3 font-bold text-green-600">KES {order.fee}</td>
-                      <td className="p-3 text-sm text-gray-400">{new Date(order.updated_at).toLocaleDateString()}</td>
+                      <td className="p-3 font-black text-green-600">KES {order.fee}</td>
+                      <td className="p-3 text-gray-400">{new Date(order.updated_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                   {orders.filter(o => o.status === 'delivered').length === 0 && (
-                    <tr><td colSpan="6" className="text-center p-6 text-gray-500">No transactions recorded yet.</td></tr>
+                    <tr><td colSpan="6" className="text-center p-8 text-gray-400 font-medium">No transactions recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -427,355 +435,394 @@ export default function CEOAdminPanel() {
   }
 
   return (
-    <div className="dashboard-grid relative">
-      {/* Top Navigation Overlay */}
-      <div className="absolute top-4 right-4 z-[400] flex gap-2">
-        <button className="btn btn-primary shadow-lg" onClick={() => setActiveTab('dispatch')}>
-          <MapIcon size={18} className="inline mr-2" /> Live Map
-        </button>
-        <button className="btn bg-white text-gray-700 shadow-lg border border-gray-200" onClick={() => setActiveTab('transactions')}>
-          <LayoutDashboard size={18} className="inline mr-2" /> Finance
-        </button>
-      </div>
-
-      <div className="sidebar">
-        <div className="flex gap-4 mb-4">
-          <div className="card w-full text-center p-3">
-            <Activity className="text-gray mx-auto mb-1" size={20} />
-            <div className="text-xl font-bold">{totalOrders}</div>
-          </div>
-          <div className="card w-full text-center p-3">
-            <DollarSign className="text-gray mx-auto mb-1" size={20} />
-            <div className="text-xl font-bold text-accent-color">KES {totalEarnings}</div>
-          </div>
+    <div className="flex flex-1 h-[calc(100vh-74px)] bg-gray-100 overflow-hidden relative w-full">
+      {/* Sidebar Panel */}
+      <div className="w-full md:w-[450px] bg-white border-r border-gray-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.03)] z-10">
+        
+        {/* Sidebar Tabs */}
+        <div className="flex border-b border-gray-200 bg-gray-50">
+          <button 
+            className={`flex-1 py-4 text-sm font-black transition-all flex items-center justify-center gap-2 tracking-wide uppercase ${activeSidebarTab === 'dispatch' ? 'text-blue-700 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+            onClick={() => setActiveSidebarTab('dispatch')}
+          >
+            <Package size={18} /> Dispatch
+          </button>
+          <button 
+            className={`flex-1 py-4 text-sm font-black transition-all flex items-center justify-center gap-2 tracking-wide uppercase ${activeSidebarTab === 'orders' ? 'text-blue-700 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+            onClick={() => setActiveSidebarTab('orders')}
+          >
+            <ListChecks size={18} /> Active ({orders.length})
+          </button>
         </div>
 
-        <div className="card border-t-4 border-primary-color">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <Package size={20} /> Dispatch Order
-            </h2>
-            {/* Single vs Batch Mode Switcher */}
-            <div className="flex bg-gray-100 p-0.5 rounded-lg text-xs font-semibold">
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${dispatchMode === 'single' ? 'bg-white text-primary-color shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'}`}
-                onClick={() => setDispatchMode('single')}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${dispatchMode === 'batch' ? 'bg-white text-primary-color shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'}`}
-                onClick={() => setDispatchMode('batch')}
-              >
-                <Layers size={13} /> Batch (Multi)
-              </button>
-            </div>
-          </div>
-
-          {dispatchMode === 'single' ? (
-            <form onSubmit={handleDispatch}>
-              <div className="form-group">
-                <label>Customer Name</label>
-                <input type="text" className="form-control" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
-              </div>
-
-              <div className="form-group relative">
-                <label>Pickup Location</label>
-                <div className="flex gap-2">
-                  <input type="text" className="form-control flex-1" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
-                  <button type="button" 
-                    className={`btn ${mapClickMode === 'pickup' ? 'btn-primary' : 'bg-gray-100 text-gray-600'}`} 
-                    onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
-                    title="Click map to set">
-                    <MousePointerClick size={18} />
-                  </button>
-                </div>
-                {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 mt-1 animate-pulse">Click anywhere on map to set pickup...</div>}
-              </div>
-
-              <div className="form-group relative">
-                <label>Delivery Location</label>
-                <div className="flex gap-2">
-                  <input type="text" className="form-control flex-1" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
-                  <button type="button" 
-                    className={`btn ${mapClickMode === 'dropoff' ? 'btn-primary' : 'bg-gray-100 text-gray-600'}`} 
-                    onClick={() => setMapClickMode(mapClickMode === 'dropoff' ? null : 'dropoff')}
-                    title="Click map to set">
-                    <MousePointerClick size={18} />
-                  </button>
-                </div>
-                {mapClickMode === 'dropoff' && <div className="text-xs text-blue-600 mt-1 animate-pulse">Click anywhere on map to set delivery...</div>}
-              </div>
-
-              <div className="flex gap-4 mb-4">
-                <div className="form-group w-full">
-                  <label>Phone</label>
-                  <input type="text" className="form-control" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
-                </div>
-                <div className="form-group w-full">
-                  <label>Fee (KES)</label>
-                  <input type="number" className="form-control" name="fee" value={formData.fee} onChange={handleInputChange} required />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" className="btn btn-primary w-full justify-center">
-                  <Send size={18} /> Dispatch
-                </button>
-                <button type="button" className="btn btn-success w-full justify-center" onClick={() => triggerMpesa(null)} title="Send M-Pesa request (link to order after dispatching)">
-                  <Smartphone size={18} /> 
-                  {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent!' : 'M-Pesa'}
-                </button>
-              </div>
-            </form>
-          ) : (
-            /* ── Batch Multi-Order Form (Mockup: Hannan -> Fatma, Erick...) ── */
-            <div className="space-y-3">
-              {/* Merchant & Pickup Header */}
-              <div className="bg-blue-50/70 p-3 rounded-lg border border-blue-100 space-y-2">
-                <div className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center justify-between">
-                  <span>Sender / Merchant Details</span>
-                  <span className="text-[11px] font-normal text-blue-700">Common for all stops</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-gray-600 block mb-0.5 font-medium">Merchant / Client</label>
-                    <input
-                      type="text"
-                      className="form-control text-sm py-1.5"
-                      placeholder="e.g. Hannan"
-                      value={batchMerchant}
-                      onChange={(e) => setBatchMerchant(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-600 block mb-0.5 font-medium">Pickup Location</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        className="form-control text-sm py-1.5 flex-1"
-                        placeholder="e.g. CBD Shop #4"
-                        value={batchPickupData.pickup}
-                        onChange={(e) => setBatchPickupData({ ...batchPickupData, pickup: e.target.value })}
-                      />
-                      <button
-                        type="button"
-                        className={`btn px-2 py-1 ${mapClickMode === 'pickup' ? 'btn-primary' : 'bg-white text-gray-600 border border-gray-200'}`}
-                        onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
-                        title="Pick on map"
-                      >
-                        <MousePointerClick size={15} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 animate-pulse">Click map to set batch pickup location...</div>}
-              </div>
-
-              {/* Queued Deliveries List */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-100 px-3 py-1.5 flex justify-between items-center text-xs font-bold text-gray-700">
-                  <span>Queued Deliveries ({batchItems.length})</span>
-                  <span className="text-primary-color font-bold">
-                    Total: KES {batchItems.reduce((acc, i) => acc + (parseFloat(i.fee) || 0), 0)}
-                  </span>
-                </div>
-                <div className="max-h-[160px] overflow-y-auto divide-y divide-gray-100 bg-white">
-                  {batchItems.length === 0 ? (
-                    <div className="text-center py-4 text-xs text-gray-400">
-                      No orders in batch yet. Add customer deliveries below.
-                    </div>
-                  ) : (
-                    batchItems.map((item, idx) => (
-                      <div key={item.id} className="p-2 flex items-center justify-between text-xs hover:bg-gray-50 transition">
-                        <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
-                          <span className="w-5 h-5 rounded-full bg-primary-color/10 text-primary-color font-bold flex items-center justify-center text-[11px] shrink-0">
-                            {idx + 1}
-                          </span>
-                          <div className="truncate">
-                            <div className="font-semibold text-gray-800 flex items-center gap-1.5">
-                              <span>{item.customerName}</span>
-                              {item.customerPhone && (
-                                <span className="text-gray-400 font-normal text-[11px]">({item.customerPhone})</span>
-                              )}
-                            </div>
-                            <div className="text-gray-500 text-[11px] truncate">
-                              📍 {item.dropoff} {item.description && `· ${item.description}`}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-bold text-green-700 text-xs">KES {item.fee}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveBatchItem(item.id)}
-                            className="text-red-400 hover:text-red-600 p-1"
-                            title="Remove"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Add Delivery Stop Form */}
-              <form onSubmit={handleAddBatchItem} className="bg-gray-50 p-2.5 rounded-lg border border-dashed border-gray-300 space-y-2">
-                <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">
-                  + Add Stop / Recipient
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    className="form-control text-xs py-1 px-2"
-                    placeholder="Customer (e.g. Fatma)"
-                    value={newBatchItem.customerName}
-                    onChange={(e) => setNewBatchItem({ ...newBatchItem, customerName: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    className="form-control text-xs py-1 px-2"
-                    placeholder="Destination (e.g. majengo)"
-                    value={newBatchItem.dropoff}
-                    onChange={(e) => setNewBatchItem({ ...newBatchItem, dropoff: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    className="form-control text-xs py-1 px-2"
-                    placeholder="Phone (07...)"
-                    value={newBatchItem.customerPhone}
-                    onChange={(e) => setNewBatchItem({ ...newBatchItem, customerPhone: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    className="form-control text-xs py-1 px-2"
-                    placeholder="Fee (KES)"
-                    value={newBatchItem.fee}
-                    onChange={(e) => setNewBatchItem({ ...newBatchItem, fee: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    className="form-control text-xs py-1 px-2"
-                    placeholder="Note (optional)"
-                    value={newBatchItem.description}
-                    onChange={(e) => setNewBatchItem({ ...newBatchItem, description: e.target.value })}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="btn bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 w-full py-1 text-xs justify-center font-semibold"
-                >
-                  <Plus size={14} /> Add Delivery to Batch
-                </button>
-              </form>
-
-              {/* Batch Action Buttons */}
-              <div className="flex gap-2 pt-1">
+        {/* Sidebar Content (Scrollable) */}
+        <div className="flex-1 overflow-y-auto bg-gray-50">
+          {activeSidebarTab === 'dispatch' && (
+            <div className="p-5 space-y-6">
+              {/* Dispatch Mode Switcher */}
+              <div className="bg-gray-200/70 p-1.5 rounded-xl flex shadow-inner">
                 <button
                   type="button"
-                  className="btn btn-primary flex-1 justify-center py-2 text-sm font-bold shadow"
-                  onClick={handleBatchDispatch}
-                  disabled={batchItems.length === 0}
+                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${dispatchMode === 'single' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                  onClick={() => setDispatchMode('single')}
                 >
-                  <Send size={16} /> Dispatch All ({batchItems.length} Orders)
+                  <Package size={16} /> Single Route
                 </button>
-                {batchItems.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn btn-outline py-2 text-xs text-gray-500 hover:text-red-600"
-                    onClick={() => setBatchItems([])}
-                    title="Clear batch"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Active Orders List with Phone Features (Call, WhatsApp, Copy, Pay) ── */}
-        <div className="card mt-4 max-h-[340px] overflow-y-auto">
-          <h3 className="font-bold mb-3 text-sm text-gray-500 uppercase tracking-wider">Active Orders</h3>
-          {orders.map(order => (
-            <div key={order.id} className="p-3 mb-2 border border-gray-100 rounded-lg hover:shadow-sm transition-shadow bg-gray-50">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-gray-800">{order.customer_name}</span>
-                <span className={`status-badge status-${order.status === 'delivered' ? 'online' : (order.status === 'paid' ? 'online' : 'busy')}`} style={{ fontSize: '0.65rem' }}>
-                  {order.status}
-                </span>
-              </div>
-              
-              <div className="text-gray-500 text-xs truncate max-w-full">
-                {order.pickup_address} → {order.dropoff_address}
+                <button
+                  type="button"
+                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${dispatchMode === 'batch' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                  onClick={() => setDispatchMode('batch')}
+                >
+                  <Layers size={16} /> Batch (Multi)
+                </button>
               </div>
 
-              {/* Customer Phone & Quick Actions Bar */}
-              {order.customer_phone && (
-                <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-gray-100 text-xs">
-                  <span className="font-mono text-gray-600 text-[11px]">
-                    {order.customer_phone}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <a
-                      href={`tel:${order.customer_phone}`}
-                      className="p-1 rounded text-blue-600 hover:bg-blue-50 transition"
-                      title={`Call ${order.customer_name}`}
+              {/* Forms */}
+              {dispatchMode === 'single' ? (
+                <form onSubmit={handleDispatch} className="space-y-4">
+                  <div>
+                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Customer Name</label>
+                    <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Pickup Location</label>
+                    <div className="flex gap-2">
+                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
+                      <button type="button" 
+                        className={`p-3 rounded-xl transition-all shadow-sm ${mapClickMode === 'pickup' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`} 
+                        onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
+                        title="Click map to set">
+                        <MousePointerClick size={20} />
+                      </button>
+                    </div>
+                    {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 mt-2 font-bold animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click anywhere on map to set pickup...</div>}
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Delivery Location</label>
+                    <div className="flex gap-2">
+                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
+                      <button type="button" 
+                        className={`p-3 rounded-xl transition-all shadow-sm ${mapClickMode === 'dropoff' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`} 
+                        onClick={() => setMapClickMode(mapClickMode === 'dropoff' ? null : 'dropoff')}
+                        title="Click map to set">
+                        <MousePointerClick size={20} />
+                      </button>
+                    </div>
+                    {mapClickMode === 'dropoff' && <div className="text-xs text-blue-600 mt-2 font-bold animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click anywhere on map to set delivery...</div>}
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="w-full">
+                      <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Phone</label>
+                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
+                    </div>
+                    <div className="w-full">
+                      <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Fee (KES)</label>
+                      <input type="number" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium font-black text-green-700" name="fee" value={formData.fee} onChange={handleInputChange} required />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button type="submit" className="flex-1 py-3.5 bg-gray-900 text-white rounded-xl shadow-lg hover:bg-gray-800 transition-all font-bold text-sm flex justify-center items-center gap-2">
+                      <Send size={18} /> Dispatch Now
+                    </button>
+                    <button type="button" className="px-6 py-3.5 bg-green-500 text-white rounded-xl shadow-lg shadow-green-500/20 hover:bg-green-600 transition-all font-bold text-sm flex justify-center items-center gap-2" onClick={() => triggerMpesa(null)} title="Send M-Pesa request">
+                      <Smartphone size={18} /> 
+                      {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent!' : 'Pay'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-5">
+                  {/* Merchant & Pickup Header */}
+                  <div className="bg-blue-50/70 p-5 rounded-2xl border border-blue-100 space-y-4">
+                    <div className="text-xs font-black text-blue-900 uppercase tracking-widest flex items-center justify-between">
+                      <div className="flex items-center gap-2"><MapPin size={16} className="text-blue-600" /> Sender Profile</div>
+                      <span className="text-[10px] bg-blue-100 px-2 py-1 rounded-full text-blue-700 font-bold">Common Pickup</span>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[11px] text-blue-800/70 block mb-1.5 font-bold uppercase tracking-wider">Merchant / Client Name</label>
+                        <input
+                          type="text"
+                          className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-bold text-gray-800 shadow-sm"
+                          placeholder="e.g. Hannan"
+                          value={batchMerchant}
+                          onChange={(e) => setBatchMerchant(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-blue-800/70 block mb-1.5 font-bold uppercase tracking-wider">Pickup Location</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-medium text-gray-800 shadow-sm"
+                            placeholder="e.g. CBD Shop #4"
+                            value={batchPickupData.pickup}
+                            onChange={(e) => setBatchPickupData({ ...batchPickupData, pickup: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            className={`p-2.5 rounded-xl transition-all shadow-sm ${mapClickMode === 'pickup' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50'}`}
+                            onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
+                            title="Pick on map"
+                          >
+                            <MousePointerClick size={20} />
+                          </button>
+                        </div>
+                        {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 font-bold mt-2 animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click map to set batch pickup location...</div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Queued Deliveries List */}
+                  <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="bg-gray-50 px-5 py-3 flex justify-between items-center border-b border-gray-100">
+                      <span className="text-[11px] font-black text-gray-600 uppercase tracking-wider">Deliveries ({batchItems.length})</span>
+                      <span className="text-green-600 font-black text-sm">
+                        KES {batchItems.reduce((acc, i) => acc + (parseFloat(i.fee) || 0), 0)}
+                      </span>
+                    </div>
+                    <div className="max-h-[200px] overflow-y-auto divide-y divide-gray-50">
+                      {batchItems.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-gray-400 font-medium">
+                          No deliveries added yet.
+                        </div>
+                      ) : (
+                        batchItems.map((item, idx) => (
+                          <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
+                            <div className="flex items-center gap-3 flex-1 min-w-0 mr-3">
+                              <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-black flex items-center justify-center text-xs shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="truncate">
+                                <div className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                                  {item.customerName}
+                                  {item.customerPhone && (
+                                    <span className="text-gray-400 font-medium text-xs font-mono">({item.customerPhone})</span>
+                                  )}
+                                </div>
+                                <div className="text-gray-500 text-xs truncate mt-1 flex items-center gap-1.5 font-medium">
+                                  <MapPin size={12} className="text-gray-400"/> {item.dropoff} {item.description && <span className="text-gray-400">· {item.description}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 shrink-0">
+                              <span className="font-black text-green-600 text-sm">KES {item.fee}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBatchItem(item.id)}
+                                className="text-gray-300 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                                title="Remove"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add Delivery Stop Form */}
+                  <form onSubmit={handleAddBatchItem} className="bg-white p-5 rounded-2xl border border-dashed border-gray-300 space-y-4 hover:border-gray-400 transition-colors">
+                    <div className="text-[11px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                      <Plus size={14} /> Add Dropoff Stop
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
+                        placeholder="Customer Name"
+                        value={newBatchItem.customerName}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, customerName: e.target.value })}
+                      />
+                      <input
+                        type="text"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
+                        placeholder="Destination (e.g. Majengo)"
+                        value={newBatchItem.dropoff}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, dropoff: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <input
+                        type="text"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
+                        placeholder="Phone"
+                        value={newBatchItem.customerPhone}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, customerPhone: e.target.value })}
+                      />
+                      <input
+                        type="number"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-black text-green-700 placeholder:text-gray-400 placeholder:font-medium"
+                        placeholder="Fee"
+                        value={newBatchItem.fee}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, fee: e.target.value })}
+                      />
+                      <input
+                        type="text"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
+                        placeholder="Note (Opt)"
+                        value={newBatchItem.description}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, description: e.target.value })}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-gray-100 text-gray-800 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 mt-2 border border-gray-200"
                     >
-                      <Phone size={13} />
-                    </a>
-                    <a
-                      href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(`Hello ${order.customer_name}, Falcon Delivery here regarding your order (${order.order_number}).`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-1 rounded text-green-600 hover:bg-green-50 transition"
-                      title={`WhatsApp ${order.customer_name}`}
-                    >
-                      <MessageCircle size={13} />
-                    </a>
+                      <Plus size={16} /> Add to Queue
+                    </button>
+                  </form>
+
+                  {/* Batch Action Buttons */}
+                  <div className="flex gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(order.customer_phone, order.id)}
-                      className="p-1 rounded text-gray-500 hover:bg-gray-200 transition"
-                      title="Copy Phone Number"
+                      className="flex-1 py-3.5 bg-gray-900 text-white rounded-xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 hover:shadow-xl transition-all font-bold text-sm flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={handleBatchDispatch}
+                      disabled={batchItems.length === 0}
                     >
-                      {copiedOrderId === order.id ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+                      <Send size={18} /> Dispatch Batch ({batchItems.length})
                     </button>
+                    {batchItems.length > 0 && (
+                      <button
+                        type="button"
+                        className="px-5 py-3.5 bg-white border border-gray-200 text-red-600 rounded-xl hover:bg-red-50 hover:border-red-200 transition-colors font-bold text-sm flex justify-center items-center shadow-sm"
+                        onClick={() => setBatchItems([])}
+                        title="Clear batch"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
-
-              <div className="text-gray-600 mt-1.5 text-xs font-semibold flex justify-between items-center">
-                <span>KES {order.fee}</span>
-                <div className="flex gap-2 items-center">
-                  <span className="text-primary-color">{riders[order.assigned_rider_id]?.name || 'Unassigned'}</span>
-                  {/* M-Pesa button linked to THIS specific order for accurate reconciliation */}
-                  {order.status !== 'delivered' && order.status !== 'paid' && (
-                    <button
-                      onClick={() => triggerMpesa(order.id)}
-                      className="btn btn-success"
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem' }}
-                      title="Trigger M-Pesa payment for this order"
-                    >
-                      <Smartphone size={11} /> Pay
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
-          ))}
-          {orders.length === 0 && (
-            <div className="text-gray-400 text-center py-4 text-sm">No active orders</div>
+          )}
+
+          {activeSidebarTab === 'orders' && (
+            <div className="p-5 space-y-4">
+              {orders.map(order => (
+                <div key={order.id} className="bg-white p-5 border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+                  <div className={`absolute top-0 left-0 w-1 h-full ${
+                    order.status === 'delivered' ? 'bg-green-500' : 
+                    order.status === 'paid' ? 'bg-emerald-500' : 
+                    'bg-amber-500'
+                  }`}></div>
+                  
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-black text-gray-900 text-base leading-none">{order.customer_name}</h4>
+                      <div className="text-[10px] text-gray-400 font-mono mt-1.5 uppercase tracking-wider">{order.order_number}</div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
+                      order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-2 text-gray-600 text-xs mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <div className="flex items-center gap-2 font-medium">
+                      <div className="w-5 h-5 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                        <MapPin size={10} className="text-gray-400"/>
+                      </div>
+                      <span className="truncate">{order.pickup_address}</span>
+                    </div>
+                    <div className="w-0.5 h-3 bg-gray-200 ml-2.5"></div>
+                    <div className="flex items-center gap-2 font-medium">
+                      <div className="w-5 h-5 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                        <ArrowRight size={10} className="text-gray-400"/>
+                      </div>
+                      <span className="truncate">{order.dropoff_address}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Fee</span>
+                      <span className="font-black text-green-600 text-base leading-none">KES {order.fee}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Assigned Rider</span>
+                      <span className="font-bold text-blue-600 text-sm leading-none bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                        {riders[order.assigned_rider_id]?.name || 'Unassigned'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Phone & Quick Actions Bar */}
+                  <div className="flex items-center justify-between mt-4 bg-gray-50 p-2 rounded-xl border border-gray-100">
+                    <span className="font-mono text-gray-700 text-xs font-bold pl-2 tracking-wide">
+                      {order.customer_phone || 'No Phone'}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {order.customer_phone && (
+                        <>
+                          <a href={`tel:${order.customer_phone}`} className="p-2 rounded-lg bg-white border border-gray-200 text-blue-600 hover:bg-blue-50 transition shadow-sm" title="Call">
+                            <Phone size={14} />
+                          </a>
+                          <a href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(`Hello ${order.customer_name}, Falcon Delivery here regarding your order (${order.order_number}).`)}`} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-white border border-gray-200 text-green-600 hover:bg-green-50 transition shadow-sm" title="WhatsApp">
+                            <MessageCircle size={14} />
+                          </a>
+                        </>
+                      )}
+                      <button type="button" onClick={() => copyToClipboard(order.customer_phone || order.order_number, order.id)} className="p-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 transition shadow-sm" title="Copy">
+                        {copiedOrderId === order.id ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                      </button>
+                      {order.status !== 'delivered' && order.status !== 'paid' && (
+                        <button onClick={() => triggerMpesa(order.id)} className="p-2 px-4 rounded-lg bg-green-500 text-white font-bold text-xs hover:bg-green-600 transition shadow-sm ml-1 flex items-center gap-1" title="M-Pesa Pay">
+                          <Smartphone size={14}/> Pay
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {orders.length === 0 && (
+                <div className="text-gray-400 text-center py-16 text-sm font-medium flex flex-col items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                  <Package size={32} className="text-gray-300"/>
+                  No active orders on the board
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      <div className="map-container relative z-0">
+      {/* Map Container */}
+      <div className="flex-1 relative z-0">
+        {/* Map Overlay Top Left (Metrics) */}
+        <div className="absolute top-5 left-5 z-[400] flex gap-3 pointer-events-none">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 px-6 flex items-center gap-8 pointer-events-auto">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Deliveries</span>
+              <span className="text-2xl font-black text-gray-900 leading-none">{totalOrders}</span>
+            </div>
+            <div className="w-px h-10 bg-gray-100"></div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Gross Revenue</span>
+              <span className="text-2xl font-black text-green-600 leading-none">KES {totalEarnings}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Map Overlay Top Right (Switch to Finance Tab) */}
+        <div className="absolute top-5 right-5 z-[400]">
+          <button 
+            className="bg-white hover:bg-gray-50 text-gray-800 px-6 py-3 rounded-2xl shadow-xl border border-gray-200 font-bold transition-all flex items-center gap-2 pointer-events-auto"
+            onClick={() => setActiveTab('transactions')}
+          >
+            <LayoutDashboard size={18} className="text-blue-600" />
+            Finance Dashboard
+          </button>
+        </div>
+
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           

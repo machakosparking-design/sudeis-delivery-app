@@ -56,7 +56,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch the user's role from the riders table once they are logged in
+  // Fetch the user's role from metadata or the riders table once logged in
   useEffect(() => {
     if (!session?.user?.id) {
       setUserRole(null);
@@ -64,21 +64,32 @@ export default function App() {
     }
     const fetchUserRole = async () => {
       setRoleLoading(true);
+
+      // 1. Check if role was set directly in Auth user metadata (Dashboard -> Auth -> Users)
+      const metaRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
+      if (metaRole) {
+        setUserRole(metaRole);
+        setRoleLoading(false);
+        return;
+      }
+
+      // 2. Query riders table by auth_user_id (no single() to prevent PGRST116 if multiple rows match)
       const { data, error } = await supabase
         .from('riders')
         .select('role')
-        .eq('auth_user_id', session.user.id)
-        .single();
+        .eq('auth_user_id', session.user.id);
 
-      if (error || !data) {
-        // If the user has no rider row at all, treat as unauthorized
-        console.warn('No rider profile found for user:', session.user.id);
+      if (error || !data || data.length === 0) {
+        console.warn('No rider profile found for user:', session.user.id, error);
         setUserRole('unknown');
       } else {
-        setUserRole(data.role);
+        // If any matched row has role 'ceo', grant 'ceo'; otherwise grant the assigned role
+        const isCeo = data.some(r => r.role === 'ceo');
+        setUserRole(isCeo ? 'ceo' : (data[0].role || 'rider'));
       }
       setRoleLoading(false);
     };
+
     fetchUserRole();
   }, [session?.user?.id]);
 
@@ -175,11 +186,12 @@ export default function App() {
   // ── RBAC Gate ──────────────────────────────────────────────────────────────
   // Block riders from accessing the CEO panel and unknown users from anything
   if (userRole === 'unknown') {
-    return <UnauthorizedScreen userRole={userRole} requestedContext={systemType} />;
+    return <UnauthorizedScreen userRole={userRole} requestedContext={systemType} session={session} />;
   }
   if (systemType === 'ceo' && userRole !== 'ceo') {
-    return <UnauthorizedScreen userRole={userRole} requestedContext="ceo" />;
+    return <UnauthorizedScreen userRole={userRole} requestedContext="ceo" session={session} />;
   }
+
   if (systemType === 'rider' && userRole === 'ceo') {
     // CEOs navigating to the rider app: allow (they may want to monitor)
     // but ensure the tab switcher doesn't show CEO options on rider subdomain
