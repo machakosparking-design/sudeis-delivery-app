@@ -32,26 +32,40 @@ export default function RiderApp({ riderCode }) {
   useEffect(() => {
     if (!rider.id) return;
 
-    const fetchOrders = async () => {
-      const { data: assigned } = await supabase.from('orders').select('*').eq('assigned_rider_id', rider.id).neq('status', 'delivered').single();
+    const fetchActiveOrder = async () => {
+      // First check if this rider already has an assigned, in-progress order
+      const { data: assigned } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('assigned_rider_id', rider.id)
+        .neq('status', 'delivered')
+        .single();
+
       if (assigned) {
         setActiveOrder(assigned);
         return;
       }
-      
+      // If rider is online and not busy, check if there is a pending order
+      // (but DON'T auto-claim here — let the rider tap Accept, which calls the RPC)
       if (isOnline && rider.status !== 'busy') {
-        const { data: pending } = await supabase.from('orders').select('*').eq('status', 'pending').order('created_at', { ascending: false }).limit(1).single();
+        const { data: pending } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
         if (pending) setActiveOrder(pending);
         else setActiveOrder(null);
       } else {
         setActiveOrder(null);
       }
     };
-    fetchOrders();
+    fetchActiveOrder();
 
     const dbChannel = supabase.channel(`rider-${rider.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        fetchOrders();
+        fetchActiveOrder();
         // Update historical orders if a new one is delivered
         if (payload.eventType === 'UPDATE' && payload.new.status === 'delivered' && payload.new.assigned_rider_id === rider.id) {
           setHistoricalOrders(prev => [payload.new, ...prev.filter(o => o.id !== payload.new.id)]);
@@ -114,10 +128,24 @@ export default function RiderApp({ riderCode }) {
   };
 
   const handleAccept = async () => {
-    if (activeOrder && rider.id) {
-      await supabase.from('orders').update({ status: 'accepted', assigned_rider_id: rider.id }).eq('id', activeOrder.id);
-      await supabase.from('riders').update({ status: 'busy' }).eq('id', rider.id);
+    if (!activeOrder || !rider.id) return;
+
+    // Use the atomic RPC to claim the order — this uses FOR UPDATE SKIP LOCKED
+    // at the DB level so two riders cannot accept the same order simultaneously.
+    const { data, error } = await supabase.rpc('claim_next_order', {
+      p_rider_id: rider.id
+    });
+
+    if (error) {
+      console.error('Failed to claim order:', error.message);
+      alert('This order was already taken by another rider. Please wait for the next one.');
+      setActiveOrder(null);
+    } else if (!data || data.length === 0) {
+      // Another rider beat us to it
+      alert('This order was already taken. Searching for the next available order...');
+      setActiveOrder(null);
     }
+    // The realtime subscription will update activeOrder automatically
   };
 
   const handleUpdateStatus = async (status) => {
@@ -138,43 +166,45 @@ export default function RiderApp({ riderCode }) {
 
   if (activeTab === 'earnings') {
     return (
-      <div className="rider-app">
-        <div className="rider-header flex justify-between align-center">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '700' }}>{rider.name}</h2>
-          <button className="btn btn-outline" onClick={() => setActiveTab('orders')} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+      <div className="rider-app bg-gray-50 flex flex-col h-full">
+        <div className="rider-header flex justify-between items-center bg-white shadow-sm pb-4 pt-6 px-6">
+          <h2 className="text-xl font-bold">{rider.name} - Finance</h2>
+          <button className="btn btn-outline text-sm" onClick={() => setActiveTab('orders')}>
             Back to Orders
           </button>
         </div>
 
-        <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
-          <div className="metric-grid">
-            <div className="metric-card" style={{ borderTop: '4px solid var(--accent)' }}>
-              <Wallet className="text-green" style={{ margin: '0 auto 8px auto' }} size={24} />
-              <div className="metric-value">KES {rider.earnings}</div>
-              <div className="metric-label">Total Earnings</div>
+        <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="card text-center p-6 border-t-4 border-green-500 shadow-sm bg-white">
+              <Wallet className="text-green-500 mx-auto mb-2" size={28} />
+              <div className="text-3xl font-bold text-gray-800">KES {rider.earnings}</div>
+              <div className="text-gray-500 text-sm font-medium mt-1">Total Gross Earnings</div>
             </div>
-            <div className="metric-card" style={{ borderTop: '4px solid var(--secondary)' }}>
-              <ListOrdered className="text-blue" style={{ margin: '0 auto 8px auto' }} size={24} />
-              <div className="metric-value">{rider.orders_completed}</div>
-              <div className="metric-label">Total Deliveries</div>
+            <div className="card text-center p-6 border-t-4 border-blue-500 shadow-sm bg-white">
+              <ListOrdered className="text-blue-500 mx-auto mb-2" size={28} />
+              <div className="text-3xl font-bold text-gray-800">{rider.orders_completed}</div>
+              <div className="text-gray-500 text-sm font-medium mt-1">Total Deliveries</div>
             </div>
           </div>
 
-          <div className="card-header" style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Delivery History</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <h3 className="font-bold text-lg text-gray-700 mb-3 px-1">Delivery History</h3>
+          <div className="space-y-3">
             {historicalOrders.map(order => (
-              <div key={order.id} style={{ backgroundColor: 'var(--bg-card)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-light)' }}>
-                <div className="flex justify-between" style={{ marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{new Date(order.updated_at).toLocaleDateString()}</div>
-                  <div style={{ fontSize: '0.75rem', backgroundColor: '#D1FAE5', color: '#047857', padding: '2px 8px', borderRadius: '99px', fontWeight: '700' }}>DELIVERED</div>
+              <div key={order.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div>
+                  <div className="text-xs text-gray-400 font-semibold mb-1">{new Date(order.updated_at).toLocaleDateString()}</div>
+                  <div className="font-bold text-gray-800">{order.customer_name}</div>
+                  <div className="text-xs text-gray-500 mt-1 max-w-[200px] truncate">{order.pickup_address} → {order.dropoff_address}</div>
                 </div>
-                <div className="font-bold" style={{ fontSize: '1.05rem', marginBottom: '0.25rem' }}>{order.customer_name}</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{order.pickup_address} → {order.dropoff_address}</div>
-                <div className="font-bold text-green" style={{ fontSize: '1.1rem' }}>KES {order.fee}</div>
+                <div className="text-right">
+                  <div className="font-bold text-green-600 text-lg">KES {order.fee}</div>
+                  <div className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full inline-block mt-1 uppercase tracking-wider font-bold">Delivered</div>
+                </div>
               </div>
             ))}
             {historicalOrders.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--border-light)' }}>
+              <div className="text-center py-10 text-gray-400 bg-white rounded-xl shadow-sm border border-gray-100">
                 You haven't completed any deliveries yet.
               </div>
             )}
@@ -185,16 +215,16 @@ export default function RiderApp({ riderCode }) {
   }
 
   return (
-    <div className="rider-app">
-      <div className="rider-header">
-        <div className="flex justify-between align-center mb-4">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '700' }}>{rider.name}</h2>
-          <button className="btn" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setActiveTab('earnings')}>
-            <Wallet size={16} /> Earnings
+    <div className="rider-app flex flex-col h-full">
+      <div className="rider-header pb-2">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{rider.name}</h2>
+          <button className="btn bg-gray-100 text-gray-700 hover:bg-gray-200" onClick={() => setActiveTab('earnings')}>
+            <Wallet size={16} className="inline mr-1" /> My Earnings
           </button>
         </div>
-        <div className="flex justify-between align-center" style={{ backgroundColor: 'white', padding: '1rem 1.25rem', borderRadius: '12px', color: 'var(--text-main)', boxShadow: 'var(--shadow-md)' }}>
-          <div className="font-bold flex align-center gap-2">
+        <div className="flex justify-between items-center bg-white" style={{ padding: '1rem', borderRadius: '12px', color: '#1E293B', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+          <div className="font-bold flex items-center gap-2">
             Status: <span className={`status-badge status-${rider.status}`}>{rider.status}</span>
           </div>
           <label className="toggle-switch">
@@ -204,64 +234,64 @@ export default function RiderApp({ riderCode }) {
         </div>
       </div>
 
-      <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div className="p-4" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {activeOrder ? (
-          <div className="card order-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="flex justify-between align-center mb-4" style={{ paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-light)' }}>
-              <span style={{ backgroundColor: 'var(--bg-main)', padding: '4px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
+          <div className="card order-card shadow-lg border-2 border-primary-color/20">
+            <div className="flex justify-between mb-4 pb-3 border-b border-gray-100">
+              <span className="font-bold bg-gray-100 px-3 py-1 rounded-md text-sm text-gray-600">
                 {activeOrder.order_number}
               </span>
-              <span className="font-bold text-green" style={{ fontSize: '1.25rem' }}>KES {activeOrder.fee}</span>
+              <span className="font-bold text-green-600 text-lg">KES {activeOrder.fee}</span>
             </div>
             
-            <h3 className="font-bold mb-4" style={{ fontSize: '1.5rem' }}>{activeOrder.customer_name}</h3>
+            <h3 className="font-bold text-2xl mb-4 text-gray-800">{activeOrder.customer_name}</h3>
             
-            <div className="mb-4 flex align-center" style={{ gap: '1rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '12px' }}>
-              <Package size={24} className="text-muted" />
+            <div className="mb-4 flex items-start gap-3 bg-gray-50 p-3 rounded-lg">
+              <Package size={20} className="text-gray-500 mt-0.5" />
               <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>PICKUP</div>
-                <div style={{ fontWeight: '500' }}>{activeOrder.pickup_address}</div>
+                <div className="font-bold text-xs text-gray-500 tracking-wider mb-1">PICKUP</div>
+                <div className="font-medium text-gray-800">{activeOrder.pickup_address}</div>
               </div>
             </div>
             
-            <div className="mb-4 flex align-center" style={{ gap: '1rem', backgroundColor: '#EFF6FF', padding: '1rem', borderRadius: '12px' }}>
-              <MapPin size={24} className="text-blue" />
+            <div className="mb-6 flex items-start gap-3 bg-blue-50 p-3 rounded-lg">
+              <MapPin size={20} className="text-blue-500 mt-0.5" />
               <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--secondary)', letterSpacing: '0.05em' }}>DROPOFF</div>
-                <div style={{ fontWeight: '500' }}>{activeOrder.dropoff_address}</div>
+                <div className="font-bold text-xs text-blue-500 tracking-wider mb-1">DROPOFF</div>
+                <div className="font-medium text-gray-800">{activeOrder.dropoff_address}</div>
               </div>
             </div>
 
-            <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
-              {activeOrder.status === 'pending' && (
-                <button className="btn btn-primary w-full" style={{ padding: '1rem', fontSize: '1.1rem' }} onClick={handleAccept}>
-                  Accept Delivery
-                </button>
-              )}
-              
-              {activeOrder.status === 'accepted' && (
-                <button className="btn btn-primary w-full" style={{ padding: '1rem', fontSize: '1.1rem' }} onClick={() => handleUpdateStatus('picked_up')}>
-                  <Navigation size={20} /> Mark Picked Up
-                </button>
-              )}
-              
-              {activeOrder.status === 'picked_up' && (
-                <button className="btn btn-success w-full" style={{ padding: '1rem', fontSize: '1.1rem' }} onClick={() => handleUpdateStatus('delivered')}>
-                  <CheckCircle size={20} /> Complete Delivery
-                </button>
-              )}
-            </div>
+            {activeOrder.status === 'pending' && (
+              <button className="btn btn-primary w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={handleAccept}>
+                Accept Delivery Order
+              </button>
+            )}
+            
+            {activeOrder.status === 'accepted' && (
+              <button className="btn btn-primary w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={() => handleUpdateStatus('picked_up')}>
+                <Navigation size={20} className="mr-2" /> Mark as Picked Up
+              </button>
+            )}
+            
+            {activeOrder.status === 'picked_up' && (
+              <button className="btn btn-success w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={() => handleUpdateStatus('delivered')}>
+                <CheckCircle size={20} className="mr-2" /> Complete Delivery
+              </button>
+            )}
           </div>
         ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2rem', border: '2px dashed var(--border-light)', borderRadius: '16px' }}>
-            <div style={{ backgroundColor: 'var(--bg-card)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: 'var(--shadow-sm)' }}>
-              <Navigation size={48} className={isOnline ? "text-blue" : "text-muted"} />
+          <div className="card text-center flex flex-col justify-center items-center h-full border-dashed border-2 border-gray-200">
+            <div className="text-gray-300 mb-4 bg-gray-50 p-4 rounded-full">
+              <Navigation size={48} />
             </div>
-            <h3 className="font-bold mb-2" style={{ fontSize: '1.5rem', color: isOnline ? 'var(--text-main)' : 'var(--text-muted)' }}>
-              {isOnline ? "Searching for orders..." : "You are offline"}
-            </h3>
-            <p className="text-muted" style={{ fontSize: '0.95rem', maxWidth: '250px', lineHeight: '1.5' }}>
-              {isOnline ? "Stay online to receive new delivery requests." : "Toggle your status to online at the top to start receiving orders."}
+            {isOnline ? (
+              <h3 className="font-bold text-2xl text-gray-800">Searching for orders...</h3>
+            ) : (
+              <h3 className="font-bold text-2xl text-gray-400">You are offline</h3>
+            )}
+            <p className="text-gray-500 mt-3 max-w-[250px] mx-auto text-sm">
+              {isOnline ? "Stay online and keep the app open to receive new delivery requests." : "Toggle your status to online at the top to start receiving orders."}
             </p>
           </div>
         )}

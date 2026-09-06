@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import LandingPage from './components/LandingPage';
 import AuthLogin from './components/AuthLogin';
+import UnauthorizedScreen from './components/UnauthorizedScreen';
 import './index.css';
 import { Truck, ArrowLeft, Loader2, LogOut } from 'lucide-react';
 import { supabase } from './supabase';
@@ -35,6 +36,9 @@ export default function App() {
   const [systemType, setSystemType] = useState(initContext.systemType);
   const [currentRole, setCurrentRole] = useState(initContext.systemType === 'ceo' ? 'ceo' : 'rider_1');
   const [session, setSession] = useState(null);
+  // userRole is the role stored in the DB for the logged-in user ('ceo' or 'rider')
+  const [userRole, setUserRole] = useState(null);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -45,10 +49,38 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      // Reset role on sign out
+      if (!session) setUserRole(null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch the user's role from the riders table once they are logged in
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setUserRole(null);
+      return;
+    }
+    const fetchUserRole = async () => {
+      setRoleLoading(true);
+      const { data, error } = await supabase
+        .from('riders')
+        .select('role')
+        .eq('auth_user_id', session.user.id)
+        .single();
+
+      if (error || !data) {
+        // If the user has no rider row at all, treat as unauthorized
+        console.warn('No rider profile found for user:', session.user.id);
+        setUserRole('unknown');
+      } else {
+        setUserRole(data.role);
+      }
+      setRoleLoading(false);
+    };
+    fetchUserRole();
+  }, [session?.user?.id]);
 
   // Listen to popstate / browser history navigation
   useEffect(() => {
@@ -130,6 +162,29 @@ export default function App() {
     return <AuthLogin systemType={systemType} onAuthSuccess={(sess) => setSession(sess)} />;
   }
 
+  // While we fetch the user's role from the DB, show a spinner
+  if (roleLoading || userRole === null) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', color: '#64748B' }}>
+        <Loader2 size={36} style={{ animation: 'spin 1s linear infinite' }} />
+        <p style={{ fontWeight: 500 }}>Verifying access...</p>
+      </div>
+    );
+  }
+
+  // ── RBAC Gate ──────────────────────────────────────────────────────────────
+  // Block riders from accessing the CEO panel and unknown users from anything
+  if (userRole === 'unknown') {
+    return <UnauthorizedScreen userRole={userRole} requestedContext={systemType} />;
+  }
+  if (systemType === 'ceo' && userRole !== 'ceo') {
+    return <UnauthorizedScreen userRole={userRole} requestedContext="ceo" />;
+  }
+  if (systemType === 'rider' && userRole === 'ceo') {
+    // CEOs navigating to the rider app: allow (they may want to monitor)
+    // but ensure the tab switcher doesn't show CEO options on rider subdomain
+  }
+
   // Delivery System View (CEO Admin & Rider App)
   return (
     <div className="app-container">
@@ -151,7 +206,8 @@ export default function App() {
         </div>
 
         <div className="role-selector" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {(!systemType || systemType === 'ceo') && (
+          {/* CEO Admin tab — only shown to users with role 'ceo' */}
+          {userRole === 'ceo' && (!systemType || systemType === 'ceo') && (
             <button 
               className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
               onClick={() => setCurrentRole('ceo')}
@@ -190,7 +246,7 @@ export default function App() {
           <p style={{ fontWeight: 500 }}>Loading Falcon Delivery System...</p>
         </div>
       }>
-        {currentRole === 'ceo' ? (
+        {currentRole === 'ceo' && userRole === 'ceo' ? (
           <CEOAdminPanel />
         ) : (
           <RiderApp riderCode={currentRole} />
@@ -199,3 +255,4 @@ export default function App() {
     </div>
   );
 }
+

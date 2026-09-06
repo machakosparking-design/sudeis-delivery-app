@@ -16,35 +16,64 @@ serve(async (req) => {
     const checkoutRequestID = body.CheckoutRequestID;
 
     if (resultCode === 0) {
-      // Payment Successful
+      // ── Payment Successful ─────────────────────────────────────────────────
       const meta = body.CallbackMetadata.Item;
       const receiptElement = meta.find((item: any) => item.Name === 'MpesaReceiptNumber');
       const mpesaReceipt = receiptElement ? receiptElement.Value : 'UNKNOWN';
 
-      // Update the order in the database to paid
-      // We assume the frontend passed the CheckoutRequestID to the order, OR we just mark the most recent pending order for this phone number.
-      // For this prototype, we'll just log it or update based on phone number if we had passed it.
-      // A better way is to update an order where status is 'pending' and mpesa_receipt is null, but we don't have the order ID in the callback directly unless we saved CheckoutRequestID.
-      
-      // We will look for an order with this CheckoutRequestID (we should save it in mpesa-stk or frontend).
-      // For now, if we receive a success, we just update the most recent pending order to paid.
-      // (In production, the frontend should save the CheckoutRequestID to the order).
-      console.log(`Payment Success! Receipt: ${mpesaReceipt}`);
+      // Find the exact order using the CheckoutRequestID that was saved during
+      // the STK push. This eliminates any guesswork or race conditions.
+      const { data: matchedOrder, error: findError } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('mpesa_checkout_id', checkoutRequestID)
+        .single();
+
+      if (findError || !matchedOrder) {
+        console.error(`Could not find order for CheckoutRequestID: ${checkoutRequestID}`, findError?.message);
+        // Still return 200 so Safaricom stops retrying — log for manual review
+      } else {
+        const { error: updateError } = await supabase
+          .from('orders')
+          .update({
+            status: 'paid',
+            mpesa_receipt: mpesaReceipt,
+          })
+          .eq('id', matchedOrder.id);
+
+        if (updateError) {
+          console.error(`Failed to update order ${matchedOrder.id}:`, updateError.message);
+        } else {
+          console.log(`Order ${matchedOrder.id} marked as PAID. Receipt: ${mpesaReceipt}`);
+        }
+      }
     } else {
-      console.log(`Payment Failed. Desc: ${body.ResultDesc}`);
+      // ── Payment Failed or Cancelled ────────────────────────────────────────
+      console.log(`Payment Failed/Cancelled. CheckoutRequestID: ${checkoutRequestID}. Desc: ${body.ResultDesc}`);
+
+      // Optionally mark the order's payment as failed for UI feedback
+      const { error: failError } = await supabase
+        .from('orders')
+        .update({ mpesa_checkout_id: null }) // Clear the ID so it can be retried
+        .eq('mpesa_checkout_id', checkoutRequestID);
+
+      if (failError) {
+        console.error('Failed to clear failed checkout ID:', failError.message);
+      }
     }
 
-    // Safaricom expects a success response so they stop retrying
+    // Safaricom expects a success response to stop retrying
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }), {
       headers: { 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error('mpesa-callback error:', error);
     return new Response(JSON.stringify({ ResultCode: 1, ResultDesc: "Error processing callback" }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500,
     });
   }
 });
+

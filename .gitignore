@@ -8,11 +8,19 @@ client/dist/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 client/.env
+client/.env.*
+!client/.env.example
 *.local
+
+# Supabase temp files
+supabase/.temp/
 
 # IDEs & System
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
