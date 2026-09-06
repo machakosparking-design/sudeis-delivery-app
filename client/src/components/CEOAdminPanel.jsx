@@ -828,7 +828,7 @@ export default function CEOAdminPanel({ userRole }) {
                       )}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-                      {rider.rider_code} • {rider.phone || 'No phone'}
+                      Code: {rider.rider_code} • Status: <span style={{ textTransform: 'capitalize' }}>{rider.status || 'offline'}</span>
                     </div>
                   </div>
                 </div>

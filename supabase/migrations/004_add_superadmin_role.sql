@@ -66,5 +66,5 @@ CREATE POLICY riders_update_policy ON public.riders
 --
 -- If you don't have a rider row yet, create one:
 --
---   INSERT INTO public.riders (name, rider_code, phone, status, role, auth_user_id)
---   VALUES ('Developer', 'superadmin', '254700000000', 'online', 'superadmin', '<YOUR-AUTH-UUID>');
+--   INSERT INTO public.riders (name, rider_code, status, role, auth_user_id)
+--   VALUES ('Developer', 'superadmin', 'online', 'superadmin', '<YOUR-AUTH-UUID>');
