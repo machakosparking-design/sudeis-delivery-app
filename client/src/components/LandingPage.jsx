@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './LandingPage.css';
 import FalconIcon from './FalconIcon';
 import { 
@@ -22,6 +22,52 @@ import {
 
 export default function LandingPage({ onGoToApp }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [statsAnimated, setStatsAnimated] = useState(false);
+  const [counts, setCounts] = useState({ onTime: 0, parcels: 0, verified: 0 });
+
+  // Scroll Reveal Intersection Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-revealed');
+            if (entry.target.classList.contains('stats-section')) {
+              setStatsAnimated(true);
+            }
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    const revealElements = document.querySelectorAll('.reveal-on-scroll');
+    revealElements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Smooth Count-up Animation for Metrics
+  useEffect(() => {
+    if (!statsAnimated) return;
+    const start = performance.now();
+    const duration = 1600;
+
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      setCounts({
+        onTime: (ease * 99.8).toFixed(1),
+        parcels: Math.floor(ease * 10000),
+        verified: Math.floor(ease * 100)
+      });
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
+    };
+    const reqId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(reqId);
+  }, [statsAnimated]);
 
   const services = [
     {
@@ -208,21 +254,33 @@ export default function LandingPage({ onGoToApp }) {
       </section>
 
       {/* Stats Section */}
-      <section className="stats-section">
+      <section className="stats-section reveal-on-scroll">
         <div className="stats-container">
-          {stats.map((stat, i) => (
-            <div key={i} className="stat-card">
-              <h3 className="stat-number">{stat.number}</h3>
-              <p className="stat-label">{stat.label}</p>
-            </div>
-          ))}
+          <div className="stat-card stagger-1">
+            <h3 className="stat-number">{statsAnimated ? `${counts.onTime}%` : '99.8%'}</h3>
+            <p className="stat-label">On-Time Delivery</p>
+          </div>
+          <div className="stat-card stagger-2">
+            <h3 className="stat-number">{statsAnimated ? `${counts.parcels.toLocaleString()}+` : '10,000+'}</h3>
+            <p className="stat-label">Parcels Delivered</p>
+          </div>
+          <div className="stat-card stagger-3">
+            <h3 className="stat-number">{statsAnimated ? `${counts.verified}%` : '100%'}</h3>
+            <p className="stat-label">Verified Riders</p>
+          </div>
+          <div className="stat-card stagger-4">
+            <h3 className="stat-number" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span className="live-stat-dot" /> 24/7
+            </h3>
+            <p className="stat-label">Customer Support</p>
+          </div>
         </div>
       </section>
 
       {/* About Us Section */}
-      <section id="about" className="about-section">
+      <section id="about" className="about-section reveal-on-scroll">
         <div className="section-container">
-          <div className="section-header">
+          <div className="section-header stagger-1">
             <span className="section-tag">About Falcon Delivery</span>
             <h2 className="section-title">Your Dedicated Logistics Partner in Kenya</h2>
             <p className="section-desc">
@@ -233,9 +291,9 @@ export default function LandingPage({ onGoToApp }) {
       </section>
 
       {/* What We Do (Services) */}
-      <section id="services" className="services-section">
+      <section id="services" className="services-section reveal-on-scroll">
         <div className="section-container">
-          <div className="section-header text-center">
+          <div className="section-header text-center stagger-1">
             <span className="section-tag">What We Do</span>
             <h2 className="section-title">Comprehensive Courier & Logistics Services</h2>
             <p className="section-desc">
@@ -245,7 +303,7 @@ export default function LandingPage({ onGoToApp }) {
 
           <div className="services-grid">
             {services.map((service, index) => (
-              <div key={index} className="service-card">
+              <div key={index} className={`service-card stagger-${index + 1}`}>
                 <div className="service-icon-box">{service.icon}</div>
                 <h3 className="service-title">{service.title}</h3>
                 <p className="service-text">{service.description}</p>
@@ -264,9 +322,9 @@ export default function LandingPage({ onGoToApp }) {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="how-it-works-section">
+      <section id="how-it-works" className="how-it-works-section reveal-on-scroll">
         <div className="section-container">
-          <div className="section-header text-center">
+          <div className="section-header text-center stagger-1">
             <span className="section-tag">Seamless Process</span>
             <h2 className="section-title">How Falcon Delivery Works</h2>
             <p className="section-desc">Sending a package is simple, fast, and completely stress-free.</p>
@@ -274,7 +332,7 @@ export default function LandingPage({ onGoToApp }) {
 
           <div className="workflow-grid">
             {workflowSteps.map((step, idx) => (
-              <div key={idx} className="workflow-card">
+              <div key={idx} className={`workflow-card stagger-${idx + 1}`}>
                 <div className="step-badge">{step.step}</div>
                 <h3 className="step-title">{step.title}</h3>
                 <p className="step-desc">{step.desc}</p>
@@ -285,10 +343,10 @@ export default function LandingPage({ onGoToApp }) {
       </section>
 
       {/* Why Choose Us */}
-      <section id="why-us" className="why-us-section">
+      <section id="why-us" className="why-us-section reveal-on-scroll">
         <div className="section-container">
           <div className="why-us-grid">
-            <div className="why-us-text">
+            <div className="why-us-text stagger-1">
               <span className="section-tag">Why Choose Us</span>
               <h2 className="section-title">Built for Speed, Reliability, and Peace of Mind</h2>
               <p className="section-desc">
@@ -322,7 +380,7 @@ export default function LandingPage({ onGoToApp }) {
               </div>
             </div>
 
-            <div className="why-us-card">
+            <div className="why-us-card stagger-2">
               <div className="portal-promo-card">
                 <FalconIcon size={40} className="text-amber mb-3" />
                 <h3>Falcon Operations System</h3>
@@ -338,10 +396,10 @@ export default function LandingPage({ onGoToApp }) {
       </section>
 
       {/* Coverage & Contact Section */}
-      <section id="contact" className="contact-section">
+      <section id="contact" className="contact-section reveal-on-scroll">
         <div className="section-container">
           <div className="contact-card">
-            <div className="contact-info-col">
+            <div className="contact-info-col stagger-1">
               <span className="section-tag-light">Get in Touch</span>
               <h2>Ready to Send a Parcel or Partner with Us?</h2>
               <p>Contact our dispatch team directly for instant pickups, quotes, or corporate courier partnerships.</p>
@@ -373,7 +431,7 @@ export default function LandingPage({ onGoToApp }) {
               </div>
             </div>
 
-            <div className="contact-cta-col">
+            <div className="contact-cta-col stagger-2">
               <div className="action-box">
                 <h3>Instant WhatsApp Dispatch</h3>
                 <p>Chat with our support team to schedule an immediate pickup or inquire about corporate delivery rates.</p>
