@@ -125,7 +125,7 @@ export default function LandingPage({ onGoToApp }) {
     <div className="landing-wrapper">
       {/* Top Notification Bar */}
       <div className="top-banner">
-        <span>🚀 Fast, Reliable & Secure Delivery Across Kenya — <strong>Machakos, Nairobi & Countrywide</strong></span>
+        <span>Fast, Reliable & Secure Delivery Across Kenya — <strong>Nairobi, Mombasa & Countrywide</strong></span>
         <a href="https://wa.me/254700000000" target="_blank" rel="noopener noreferrer" className="banner-link">
           <MessageCircle size={14} /> Quick WhatsApp Booking
         </a>
