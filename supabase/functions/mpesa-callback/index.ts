@@ -6,7 +6,18 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const payload = await req.json();
     console.log("M-Pesa Callback Received:", JSON.stringify(payload));
@@ -14,7 +25,7 @@ serve(async (req) => {
     const body = payload?.Body?.stkCallback;
     if (!body) {
       return new Response(JSON.stringify({ ResultCode: 1, ResultDesc: "Invalid payload" }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
     }
@@ -46,6 +57,7 @@ serve(async (req) => {
 
         if (matchedOrder?.id) {
           targetOrderId = matchedOrder.id;
+          console.log(`Matched order ${targetOrderId} via CheckoutRequestID: ${checkoutRequestID}`);
         }
       }
 
@@ -121,14 +133,14 @@ serve(async (req) => {
 
     // Safaricom expects a success response so they stop retrying
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: "Accepted" }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error) {
     console.error('mpesa-callback error:', error);
     return new Response(JSON.stringify({ ResultCode: 1, ResultDesc: "Error processing callback" }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
   }

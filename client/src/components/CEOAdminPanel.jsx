@@ -117,7 +117,8 @@ export default function CEOAdminPanel() {
     orderNumber: '',
     customerName: '',
     amount: '',
-    phone: ''
+    phone: '',
+    checkoutRequestId: null
   });
   const [stkStatus, setStkStatus] = useState(null); // null, 'sending', 'awaiting_pin', 'paid', 'timeout', 'error'
   const [stkMessage, setStkMessage] = useState('');
@@ -169,14 +170,21 @@ export default function CEOAdminPanel() {
           });
 
           // Check if the currently open modal's order just got paid
-          if (stkModalData.isOpen && stkModalData.orderId === payload.new.id) {
-            if (payload.new.status === 'paid' || payload.new.mpesa_receipt) {
-              setStkStatus('paid');
-              setStkPaidDetails({
-                receipt: payload.new.mpesa_receipt || 'Confirmed',
-                amount: payload.new.fee
-              });
-            }
+          const isCurrentModalOrder = stkModalData.isOpen && (
+            (stkModalData.orderId && stkModalData.orderId === payload.new.id) ||
+            (stkModalData.phone && (
+              payload.new.customer_phone === stkModalData.phone ||
+              payload.new.customer_phone === ('254' + stkModalData.phone.replace(/^0/, '')) ||
+              payload.new.customer_phone === ('0' + stkModalData.phone.replace(/^254/, ''))
+            ))
+          );
+
+          if (isCurrentModalOrder && (payload.new.status === 'paid' || payload.new.mpesa_receipt)) {
+            setStkStatus('paid');
+            setStkPaidDetails({
+              receipt: payload.new.mpesa_receipt || 'Confirmed',
+              amount: payload.new.fee
+            });
           }
         }
       })
@@ -210,6 +218,7 @@ export default function CEOAdminPanel() {
     if (stkStatus !== 'awaiting_pin') return;
 
     setStkCountdown(60);
+    let pollCount = 0;
     const countdownTimer = setInterval(() => {
       setStkCountdown(prev => {
         if (prev <= 1) {
@@ -223,12 +232,13 @@ export default function CEOAdminPanel() {
 
     // Active polling every 2.5s for the order status
     const pollTimer = setInterval(async () => {
+      pollCount++;
       let orderData = null;
 
       if (stkModalData.orderId) {
         const { data } = await supabase
           .from('orders')
-          .select('id, status, mpesa_receipt, fee')
+          .select('id, status, mpesa_receipt, fee, mpesa_checkout_id')
           .eq('id', stkModalData.orderId)
           .maybeSingle();
         orderData = data;
@@ -239,7 +249,7 @@ export default function CEOAdminPanel() {
         const altPhone = cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : ('0' + cleanPhone.slice(3));
         const { data } = await supabase
           .from('orders')
-          .select('id, status, mpesa_receipt, fee')
+          .select('id, status, mpesa_receipt, fee, mpesa_checkout_id')
           .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${altPhone}`)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -247,6 +257,7 @@ export default function CEOAdminPanel() {
         orderData = data;
       }
 
+      // Check 1: Did Supabase DB receive payment confirmation?
       if (orderData && (orderData.status === 'paid' || orderData.mpesa_receipt)) {
         clearInterval(pollTimer);
         clearInterval(countdownTimer);
@@ -256,6 +267,39 @@ export default function CEOAdminPanel() {
           amount: orderData.fee
         });
         setOrders(prev => prev.map(o => o.id === orderData.id ? { ...o, status: 'paid', mpesa_receipt: orderData.mpesa_receipt } : o));
+        return;
+      }
+
+      // Check 2: Active STK Query to Daraja every 5 seconds (every 2nd tick)
+      const activeCheckoutId = stkModalData.checkoutRequestId || orderData?.mpesa_checkout_id;
+      if (activeCheckoutId && pollCount % 2 === 0) {
+        try {
+          const { data: queryRes } = await supabase.functions.invoke('mpesa-stk', {
+            body: {
+              action: 'query',
+              checkoutRequestId: activeCheckoutId,
+              orderId: stkModalData.orderId || orderData?.id,
+              phone: stkModalData.phone
+            }
+          });
+
+          if (queryRes?.paid) {
+            clearInterval(pollTimer);
+            clearInterval(countdownTimer);
+            const receipt = queryRes.receipt || 'Confirmed';
+            const targetId = stkModalData.orderId || orderData?.id;
+            setStkStatus('paid');
+            setStkPaidDetails({
+              receipt: receipt,
+              amount: stkModalData.amount || orderData?.fee
+            });
+            if (targetId) {
+              setOrders(prev => prev.map(o => o.id === targetId ? { ...o, status: 'paid', mpesa_receipt: receipt } : o));
+            }
+          }
+        } catch (queryErr) {
+          console.warn('Daraja poll check failed:', queryErr);
+        }
       }
     }, 2500);
 
@@ -263,7 +307,7 @@ export default function CEOAdminPanel() {
       clearInterval(countdownTimer);
       clearInterval(pollTimer);
     };
-  }, [stkStatus, stkModalData.orderId, stkModalData.phone]);
+  }, [stkStatus, stkModalData.orderId, stkModalData.phone, stkModalData.checkoutRequestId]);
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -397,7 +441,8 @@ export default function CEOAdminPanel() {
       orderNumber: order.order_number,
       customerName: order.customer_name,
       amount: order.fee,
-      phone: order.customer_phone || ''
+      phone: order.customer_phone || '',
+      checkoutRequestId: order.mpesa_checkout_id || null
     });
     setStkStatus(null);
     setStkMessage('');
@@ -452,7 +497,8 @@ export default function CEOAdminPanel() {
       orderNumber: createdOrder.order_number,
       customerName: createdOrder.customer_name,
       amount: createdOrder.fee,
-      phone: createdOrder.customer_phone
+      phone: createdOrder.customer_phone,
+      checkoutRequestId: null
     });
     setStkStatus(null);
     setStkMessage('');
@@ -484,12 +530,17 @@ export default function CEOAdminPanel() {
         throw new Error(data.error || 'Failed to trigger STK push');
       }
 
-      // If backend returned checkoutRequestId, ensure it is saved on order directly
-      if (data?.checkoutRequestId && stkModalData.orderId) {
-        await supabase
-          .from('orders')
-          .update({ mpesa_checkout_id: data.checkoutRequestId })
-          .eq('id', stkModalData.orderId);
+      // Extract checkoutRequestId from backend response (either top-level or data.data)
+      const checkoutId = data?.checkoutRequestId || data?.data?.CheckoutRequestID;
+
+      if (checkoutId) {
+        setStkModalData(prev => ({ ...prev, checkoutRequestId: checkoutId }));
+        if (stkModalData.orderId) {
+          await supabase
+            .from('orders')
+            .update({ mpesa_checkout_id: checkoutId })
+            .eq('id', stkModalData.orderId);
+        }
       }
 
       // Transition to active awaiting PIN state (DO NOT CLOSE MODAL)
@@ -555,7 +606,7 @@ export default function CEOAdminPanel() {
     if (stkModalData.orderId) {
       const { data } = await supabase
         .from('orders')
-        .select('id, status, mpesa_receipt, fee')
+        .select('id, status, mpesa_receipt, fee, mpesa_checkout_id')
         .eq('id', stkModalData.orderId)
         .maybeSingle();
       orderData = data;
@@ -567,7 +618,7 @@ export default function CEOAdminPanel() {
       const altPhone = cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : ('0' + cleanPhone.slice(3));
       const { data } = await supabase
         .from('orders')
-        .select('id, status, mpesa_receipt, fee')
+        .select('id, status, mpesa_receipt, fee, mpesa_checkout_id')
         .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.${altPhone}`)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -575,17 +626,54 @@ export default function CEOAdminPanel() {
       orderData = data;
     }
 
+    // 1. Direct DB check
     if (orderData && (orderData.status === 'paid' || orderData.mpesa_receipt)) {
       setStkStatus('paid');
       setStkPaidDetails({
         receipt: orderData.mpesa_receipt || 'Confirmed',
         amount: orderData.fee
       });
-      // Refresh local orders list
       setOrders(prev => prev.map(o => o.id === orderData.id ? { ...o, status: 'paid', mpesa_receipt: orderData.mpesa_receipt } : o));
-    } else {
-      alert("Payment has not been confirmed yet. Please wait a moment or click 'Customer Paid Cash / Manual Confirm' to manually record receipt.");
+      return;
     }
+
+    // 2. Active Daraja STK Query check
+    const activeCheckoutId = stkModalData.checkoutRequestId || orderData?.mpesa_checkout_id;
+    if (activeCheckoutId) {
+      try {
+        const { data: queryRes, error: qErr } = await supabase.functions.invoke('mpesa-stk', {
+          body: {
+            action: 'query',
+            checkoutRequestId: activeCheckoutId,
+            orderId: stkModalData.orderId || orderData?.id,
+            phone: stkModalData.phone
+          }
+        });
+
+        if (!qErr && queryRes?.paid) {
+          const receipt = queryRes.receipt || 'Confirmed';
+          const targetId = stkModalData.orderId || orderData?.id;
+          setStkStatus('paid');
+          setStkPaidDetails({
+            receipt: receipt,
+            amount: stkModalData.amount || orderData?.fee
+          });
+          if (targetId) {
+            setOrders(prev => prev.map(o => o.id === targetId ? { ...o, status: 'paid', mpesa_receipt: receipt } : o));
+          }
+          return;
+        }
+
+        if (queryRes?.cancelled) {
+          alert("Customer cancelled the M-Pesa prompt on their phone.");
+          return;
+        }
+      } catch (err) {
+        console.warn('Manual STK query error:', err);
+      }
+    }
+
+    alert("Payment has not been confirmed yet. Please wait for customer to enter PIN, or click 'Customer Paid Cash / Manual Confirm' if already paid.");
   };
 
   // ── Revenue & Metric Calculations ──────────────────────────────────────────

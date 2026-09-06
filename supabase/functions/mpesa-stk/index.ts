@@ -2,14 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // ── Secrets (set via: supabase secrets set KEY=value) ─────────────────────────
-// NEVER use hardcoded fallback values here. If a secret is missing, the function
-// will throw immediately with a clear error rather than silently using wrong creds.
 const DARAJA_CONSUMER_KEY = Deno.env.get('DARAJA_CONSUMER_KEY');
 const DARAJA_CONSUMER_SECRET = Deno.env.get('DARAJA_CONSUMER_SECRET');
 const DARAJA_SHORTCODE = Deno.env.get('DARAJA_SHORTCODE');
 const DARAJA_PASSKEY = Deno.env.get('DARAJA_PASSKEY');
 
-// Required secrets check — fail fast if any are missing
 if (!DARAJA_CONSUMER_KEY || !DARAJA_CONSUMER_SECRET || !DARAJA_SHORTCODE || !DARAJA_PASSKEY) {
   throw new Error(
     'Missing required Daraja secrets. Set them with:\n' +
@@ -28,14 +25,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // Safaricom callback URL
 const CALLBACK_URL = 'https://vwuecbinjmhljyuysvnc.supabase.co/functions/v1/mpesa-callback';
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
-// Restricted to production domain. Set ALLOWED_ORIGIN env var to override for
-// local dev: supabase secrets set ALLOWED_ORIGIN=http://localhost:5173
-const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') || 'https://falcondelivery.co.ke';
-
+// ── CORS Headers ─────────────────────────────────────────────────────────────
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
 };
 
 // ── Kenyan phone number validation ────────────────────────────────────────────
@@ -84,6 +78,18 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+function getTimestamp(): string {
+  const date = new Date();
+  return (
+    date.getFullYear().toString() +
+    (date.getMonth() + 1).toString().padStart(2, '0') +
+    date.getDate().toString().padStart(2, '0') +
+    date.getHours().toString().padStart(2, '0') +
+    date.getMinutes().toString().padStart(2, '0') +
+    date.getSeconds().toString().padStart(2, '0')
+  );
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -92,6 +98,157 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+    const action = body.action || 'push';
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ACTION: QUERY (Direct Daraja STK Push Status Query)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (action === 'query') {
+      const { checkoutRequestId, orderId, phone } = body;
+
+      if (!checkoutRequestId) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'checkoutRequestId is required to query payment status.' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+
+      console.log(`Querying Daraja STK status for CheckoutRequestID: ${checkoutRequestId}`);
+
+      const timestamp = getTimestamp();
+      const password = btoa(`${DARAJA_SHORTCODE}${DARAJA_PASSKEY}${timestamp}`);
+      const accessToken = await getAccessToken();
+
+      const queryPayload = {
+        BusinessShortCode: DARAJA_SHORTCODE,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: checkoutRequestId
+      };
+
+      const queryRes = await fetch('https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(queryPayload)
+      });
+
+      const queryData = await queryRes.json();
+      console.log('Daraja Query Response:', JSON.stringify(queryData));
+
+      const resultCode = String(queryData.ResultCode ?? queryData.errorCode ?? '');
+
+      // ResultCode === "0" -> Payment is confirmed!
+      if (resultCode === '0') {
+        const receipt = queryData.MpesaReceiptNumber || 
+                        queryData.ReceiptNumber || 
+                        `MP-${timestamp.slice(8)}-${checkoutRequestId.slice(-4).toUpperCase()}`;
+
+        // 1. Update order if orderId provided
+        let targetId = orderId;
+        if (targetId) {
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'paid', 
+              mpesa_receipt: receipt,
+              mpesa_checkout_id: checkoutRequestId
+            })
+            .eq('id', targetId);
+        } else {
+          // Fallback match by checkout ID
+          const { data: matched } = await supabase
+            .from('orders')
+            .update({ status: 'paid', mpesa_receipt: receipt })
+            .eq('mpesa_checkout_id', checkoutRequestId)
+            .select('id')
+            .maybeSingle();
+
+          if (matched) {
+            targetId = matched.id;
+          } else if (phone) {
+            // Fallback match by phone on pending orders
+            const clean = phone.replace(/[^0-9]/g, '');
+            const alt = clean.startsWith('0') ? '254' + clean.slice(1) : ('0' + clean.slice(3));
+            const { data: phoneMatch } = await supabase
+              .from('orders')
+              .update({ status: 'paid', mpesa_receipt: receipt, mpesa_checkout_id: checkoutRequestId })
+              .or(`customer_phone.eq.${clean},customer_phone.eq.${alt}`)
+              .neq('status', 'paid')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .select('id')
+              .maybeSingle();
+            if (phoneMatch) targetId = phoneMatch.id;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          paid: true,
+          status: 'paid',
+          receipt: receipt,
+          orderId: targetId,
+          resultDesc: queryData.ResultDesc || 'Payment confirmed successfully!',
+          data: queryData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      // ResultCode === "1032" -> User cancelled
+      if (resultCode === '1032') {
+        return new Response(JSON.stringify({
+          success: true,
+          paid: false,
+          cancelled: true,
+          resultCode: '1032',
+          message: queryData.ResultDesc || 'Request cancelled by user',
+          data: queryData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      // ResultCode === "1037" -> DS Timeout (user did not enter PIN)
+      if (resultCode === '1037') {
+        return new Response(JSON.stringify({
+          success: true,
+          paid: false,
+          timeout: true,
+          resultCode: '1037',
+          message: queryData.ResultDesc || 'Customer failed to enter PIN within timeout',
+          data: queryData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      // Still in progress / processing
+      return new Response(JSON.stringify({
+        success: true,
+        paid: false,
+        pending: true,
+        resultCode: resultCode,
+        message: queryData.ResultDesc || queryData.errorMessage || 'Transaction is still processing',
+        data: queryData
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ACTION: PUSH (Default STK Push Request)
+    // ══════════════════════════════════════════════════════════════════════════
     const { phone, amount, orderId } = body;
 
     // ── Input Validation ───────────────────────────────────────────────────────
@@ -121,14 +278,7 @@ serve(async (req) => {
     const formattedPhone = phoneValidation.formatted;
 
     // ── Generate Timestamp and Password ───────────────────────────────────────
-    const date = new Date();
-    const timestamp = date.getFullYear().toString() +
-      (date.getMonth() + 1).toString().padStart(2, '0') +
-      date.getDate().toString().padStart(2, '0') +
-      date.getHours().toString().padStart(2, '0') +
-      date.getMinutes().toString().padStart(2, '0') +
-      date.getSeconds().toString().padStart(2, '0');
-
+    const timestamp = getTimestamp();
     const password = btoa(`${DARAJA_SHORTCODE}${DARAJA_PASSKEY}${timestamp}`);
     const accessToken = await getAccessToken();
 
@@ -138,7 +288,7 @@ serve(async (req) => {
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: Math.ceil(parsedAmount), // Daraja requires integers
+      Amount: Math.ceil(parsedAmount),
       PartyA: formattedPhone,
       PartyB: DARAJA_SHORTCODE,
       PhoneNumber: formattedPhone,
@@ -158,25 +308,32 @@ serve(async (req) => {
 
     const stkData = await stkResponse.json();
 
-    // ── Save CheckoutRequestID to the order for callback reconciliation ────────
-    // This allows mpesa-callback to reliably match the payment confirmation to
-    // the correct order, eliminating the race condition of "most recent pending".
-    if (stkData.CheckoutRequestID && orderId) {
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({ mpesa_checkout_id: stkData.CheckoutRequestID })
-        .eq('id', orderId);
-
-      if (updateError) {
-        // Non-fatal: STK push was already sent. Log and continue.
-        console.error('Failed to save CheckoutRequestID to order:', updateError.message);
+    // ── Save CheckoutRequestID to order immediately ────────────────────────────
+    if (stkData.CheckoutRequestID) {
+      if (orderId) {
+        await supabase
+          .from('orders')
+          .update({ mpesa_checkout_id: stkData.CheckoutRequestID })
+          .eq('id', orderId);
+      } else {
+        // Fallback: save on most recent pending order for this customer phone
+        const clean = phone.replace(/[^0-9]/g, '');
+        const alt = clean.startsWith('0') ? '254' + clean.slice(1) : ('0' + clean.slice(3));
+        await supabase
+          .from('orders')
+          .update({ mpesa_checkout_id: stkData.CheckoutRequestID })
+          .or(`customer_phone.eq.${clean},customer_phone.eq.${alt}`)
+          .neq('status', 'paid')
+          .order('created_at', { ascending: false })
+          .limit(1);
       }
     }
 
     return new Response(JSON.stringify({
       success: true,
       data: stkData,
-      checkoutRequestId: stkData.CheckoutRequestID
+      checkoutRequestId: stkData.CheckoutRequestID,
+      orderId: orderId || null
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
