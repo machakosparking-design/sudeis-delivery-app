@@ -79,7 +79,7 @@ function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, s
   return null;
 }
 
-export default function CEOAdminPanel() {
+export default function CEOAdminPanel({ userRole }) {
   const [riders, setRiders] = useState({});
   const [orders, setOrders] = useState([]);
   
@@ -751,6 +751,157 @@ export default function CEOAdminPanel() {
 
   const paidOrdersList = orders.filter(o => o.status === 'paid' || o.mpesa_receipt);
 
+  // ── Manage Roles Tab (Superadmin Only) ──────────────────────────────────
+  if (activeTab === 'roles' && userRole === 'superadmin') {
+    const ridersList = Object.values(riders);
+    return (
+      <div className="finance-dashboard">
+        {/* Superadmin Banner */}
+        <div style={{
+          background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+          color: '#fff',
+          padding: '0.75rem 1.25rem',
+          borderRadius: '10px',
+          marginBottom: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontWeight: 700,
+          fontSize: '0.9rem',
+          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)'
+        }}>
+          ⚡ Super Administrator Mode — Role Management
+        </div>
+
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold">Manage User Roles</h1>
+          <button className="btn btn-primary" onClick={() => setActiveTab('dashboard')}>
+            <MapIcon size={16} /> Back to Live Map
+          </button>
+        </div>
+
+        <p style={{ color: '#64748B', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+          Assign or revoke roles for all team members. Only you (Super Admin) can change who is the CEO.
+        </p>
+
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {ridersList.map(rider => {
+            const isCurrentUser = rider.role === 'superadmin';
+            return (
+              <div key={rider.id} className="card" style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '1rem',
+                padding: '1.25rem 1.5rem',
+                border: rider.role === 'ceo' ? '2px solid #3B82F6' : rider.role === 'superadmin' ? '2px solid #F59E0B' : '1px solid var(--border-color)',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '200px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    backgroundColor: rider.role === 'superadmin' ? '#FEF3C7' : rider.role === 'ceo' ? '#DBEAFE' : '#F1F5F9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    color: rider.role === 'superadmin' ? '#D97706' : rider.role === 'ceo' ? '#2563EB' : '#64748B'
+                  }}>
+                    {rider.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '1rem' }}>
+                      {rider.name || 'Unnamed'}
+                      {isCurrentUser && (
+                        <span style={{
+                          marginLeft: '0.5rem',
+                          fontSize: '0.65rem',
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '10px',
+                          background: '#FEF3C7',
+                          color: '#D97706',
+                          fontWeight: 600
+                        }}>YOU</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                      {rider.rider_code} • {rider.phone || 'No phone'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  {/* Current role badge */}
+                  <span style={{
+                    padding: '0.25rem 0.6rem',
+                    borderRadius: '16px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    background: rider.role === 'superadmin' ? 'linear-gradient(135deg, #F59E0B, #D97706)' : rider.role === 'ceo' ? '#2563EB' : '#64748B',
+                    color: '#fff',
+                  }}>
+                    {rider.role === 'superadmin' ? '⚡ Super Admin' : rider.role === 'ceo' ? '👔 CEO' : '🏍️ Rider'}
+                  </span>
+
+                  {/* Role change dropdown — disabled for superadmin's own row */}
+                  {!isCurrentUser && (
+                    <select
+                      value={rider.role}
+                      onChange={async (e) => {
+                        const newRole = e.target.value;
+                        const confirmed = window.confirm(
+                          `Change ${rider.name}'s role from "${rider.role}" to "${newRole}"?`
+                        );
+                        if (!confirmed) return;
+
+                        const { error } = await supabase
+                          .from('riders')
+                          .update({ role: newRole })
+                          .eq('id', rider.id);
+
+                        if (error) {
+                          alert(`Error updating role: ${error.message}`);
+                        } else {
+                          setRiders(prev => ({
+                            ...prev,
+                            [rider.id]: { ...prev[rider.id], role: newRole }
+                          }));
+                        }
+                      }}
+                      style={{
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        backgroundColor: '#F8FAFC'
+                      }}
+                    >
+                      <option value="rider">Rider</option>
+                      <option value="ceo">CEO</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {ridersList.length === 0 && (
+            <div className="card" style={{ textAlign: 'center', color: '#64748B', padding: '2rem' }}>
+              No team members found.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (activeTab === 'finance') {
     return (
       <div className="finance-dashboard">
@@ -851,6 +1002,26 @@ export default function CEOAdminPanel() {
 
   return (
     <div className="dashboard-grid">
+      {/* Super Admin Mode Banner */}
+      {userRole === 'superadmin' && (
+        <div style={{
+          gridColumn: '1 / -1',
+          background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+          color: '#fff',
+          padding: '0.6rem 1.25rem',
+          borderRadius: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontWeight: 700,
+          fontSize: '0.85rem',
+          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
+          marginBottom: '0.5rem'
+        }}>
+          ⚡ Super Administrator Mode — Full System Access
+        </div>
+      )}
+
       {/* Real-time Payment Toast Notification */}
       {paymentToast && (
         <div className="payment-toast">
@@ -1713,9 +1884,16 @@ export default function CEOAdminPanel() {
 
       {/* Right Column: Live Interactive Map */}
       <div className="map-container">
-        <button className="floating-finance-btn" onClick={() => setActiveTab('finance')}>
-          <LayoutDashboard size={16} /> Finance Dashboard
-        </button>
+        <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1000, display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="floating-finance-btn" style={{ position: 'relative', top: 'auto', right: 'auto' }} onClick={() => setActiveTab('finance')}>
+            <LayoutDashboard size={16} /> Finance Dashboard
+          </button>
+          {userRole === 'superadmin' && (
+            <button className="floating-finance-btn" style={{ position: 'relative', top: 'auto', right: 'auto', background: 'linear-gradient(135deg, #F59E0B, #D97706)' }} onClick={() => setActiveTab('roles')}>
+              <Users size={16} /> Manage Roles
+            </button>
+          )}
+        </div>
 
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

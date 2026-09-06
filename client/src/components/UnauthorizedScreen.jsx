@@ -61,7 +61,7 @@ export default function UnauthorizedScreen({ userRole, requestedContext, session
         </h2>
 
         <p style={{ color: '#64748b', fontSize: '0.925rem', lineHeight: 1.5, margin: '0 0 1rem' }}>
-          Your account <strong>(role: {userRole || 'unknown'})</strong> does not have permission
+          Your account <strong>(role: {userRole === 'superadmin' ? 'Super Admin' : userRole || 'unknown'})</strong> does not have permission
           to access the <strong>{requestedContext === 'ceo' ? 'CEO Admin Panel' : 'Rider App'}</strong>.
         </p>
 

@@ -84,9 +84,10 @@ export default function App() {
         console.warn('No rider profile found for user:', session.user.id, error);
         setUserRole('unknown');
       } else {
-        // If any matched row has role 'ceo', grant 'ceo'; otherwise grant the assigned role
+        // Priority: superadmin > ceo > rider
+        const isSuperAdmin = data.some(r => r.role === 'superadmin');
         const isCeo = data.some(r => r.role === 'ceo');
-        setUserRole(isCeo ? 'ceo' : (data[0].role || 'rider'));
+        setUserRole(isSuperAdmin ? 'superadmin' : isCeo ? 'ceo' : (data[0].role || 'rider'));
       }
       setRoleLoading(false);
     };
@@ -185,17 +186,18 @@ export default function App() {
   }
 
   // ── RBAC Gate ──────────────────────────────────────────────────────────────
+  // Superadmin bypasses all gates — full access to everything
   // Block riders from accessing the CEO panel and unknown users from anything
   if (userRole === 'unknown') {
     return <UnauthorizedScreen userRole={userRole} requestedContext={systemType} session={session} />;
   }
-  if (systemType === 'ceo' && userRole !== 'ceo') {
+  if (systemType === 'ceo' && userRole !== 'ceo' && userRole !== 'superadmin') {
     return <UnauthorizedScreen userRole={userRole} requestedContext="ceo" session={session} />;
   }
 
-  if (systemType === 'rider' && userRole === 'ceo') {
-    // CEOs navigating to the rider app: allow (they may want to monitor)
-    // but ensure the tab switcher doesn't show CEO options on rider subdomain
+  if (systemType === 'rider' && (userRole === 'ceo' || userRole === 'superadmin')) {
+    // CEOs / Superadmins navigating to the rider app: allow (they may want to monitor)
+    // but ensure the tab switcher doesn't show CEO options on rider subdomain (unless superadmin)
   }
 
   // Delivery System View (CEO Admin & Rider App)
@@ -218,9 +220,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="role-selector" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {/* CEO Admin tab — only shown to users with role 'ceo' */}
-          {userRole === 'ceo' && (!systemType || systemType === 'ceo') && (
+        <div className="role-selector" style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* CEO Admin tab — shown to 'ceo' or 'superadmin' */}
+          {(userRole === 'ceo' || userRole === 'superadmin') && (!systemType || systemType === 'ceo' || userRole === 'superadmin') && (
             <button 
               className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
               onClick={() => setCurrentRole('ceo')}
@@ -230,7 +232,8 @@ export default function App() {
             </button>
           )}
           
-          {(!systemType || systemType === 'rider') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
+          {/* Rider tabs — shown when on rider context, or always for superadmin */}
+          {((!systemType || systemType === 'rider') || userRole === 'superadmin') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
             <button 
               key={riderId}
               className={`btn ${currentRole === riderId ? 'btn-outline' : ''}`}
@@ -240,6 +243,26 @@ export default function App() {
               {riderId === 'rider_1' ? 'Rider 1' : riderId === 'rider_2' ? 'Rider 2' : 'Rider 3'}
             </button>
           ))}
+
+          {/* Super Admin badge */}
+          {userRole === 'superadmin' && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.25rem 0.65rem',
+              borderRadius: '20px',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+              color: '#fff',
+              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
+            }}>
+              ⚡ Super Admin
+            </span>
+          )}
           
           <button 
             onClick={handleSignOut}
@@ -259,8 +282,8 @@ export default function App() {
           <p style={{ fontWeight: 500 }}>Loading Falcon Delivery System...</p>
         </div>
       }>
-        {currentRole === 'ceo' && userRole === 'ceo' ? (
-          <CEOAdminPanel />
+        {currentRole === 'ceo' && (userRole === 'ceo' || userRole === 'superadmin') ? (
+          <CEOAdminPanel userRole={userRole} />
         ) : (
           <RiderApp riderCode={currentRole} />
         )}
