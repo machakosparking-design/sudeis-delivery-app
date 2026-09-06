@@ -3,7 +3,8 @@ import LandingPage from './components/LandingPage';
 import AuthLogin from './components/AuthLogin';
 import UnauthorizedScreen from './components/UnauthorizedScreen';
 import './index.css';
-import { Truck, ArrowLeft, Loader2, LogOut } from 'lucide-react';
+import FalconIcon from './components/FalconIcon';
+import { ArrowLeft, Loader2, LogOut } from 'lucide-react';
 import { supabase } from './supabase';
 
 // Lazy-load heavy components so landing page visitors download 0 extra weight!
@@ -213,7 +214,7 @@ export default function App() {
           </button>
 
           <div className="flex items-center gap-2 text-xl font-bold" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Truck /> Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}
+            <FalconIcon size={22} /> Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './LandingPage.css';
+import FalconIcon from './FalconIcon';
 import { 
-  Truck, 
   Package, 
   ShieldCheck, 
   Clock, 
@@ -90,7 +90,7 @@ export default function LandingPage({ onGoToApp }) {
         <div className="nav-container">
           <div className="brand-logo">
             <div className="logo-icon-wrap">
-              <Truck size={24} className="logo-icon" />
+              <FalconIcon size={24} className="logo-icon" />
             </div>
             <div className="brand-text">
               <span className="brand-title">Falcon<span className="brand-accent">Delivery</span></span>
@@ -160,8 +160,8 @@ export default function LandingPage({ onGoToApp }) {
                 <span className="live-indicator"></span> Live Delivery Active
               </div>
               <div className="visual-illustration">
-                <div className="delivery-truck-circle">
-                  <Truck size={48} className="text-blue" />
+                <div className="delivery-falcon-circle">
+                  <FalconIcon size={48} className="text-blue" />
                 </div>
                 <div className="route-line">
                   <div className="route-dot start"></div>
@@ -304,7 +304,7 @@ export default function LandingPage({ onGoToApp }) {
 
             <div className="why-us-card">
               <div className="portal-promo-card">
-                <Truck size={40} className="text-amber mb-3" />
+                <FalconIcon size={40} className="text-amber mb-3" />
                 <h3>Falcon Operations System</h3>
                 <p>Are you a Falcon Delivery team member, rider, or partner? Access the central dispatch management system.</p>
                 <button className="btn-portal-cta" onClick={() => onGoToApp('rider')}>
@@ -377,7 +377,7 @@ export default function LandingPage({ onGoToApp }) {
           <div className="footer-brand">
             <div className="brand-logo">
               <div className="logo-icon-wrap">
-                <Truck size={20} className="logo-icon" />
+                <FalconIcon size={20} className="logo-icon" />
               </div>
               <span className="brand-title">Falcon<span className="brand-accent">Delivery</span></span>
             </div>

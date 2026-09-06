@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { Truck } from 'lucide-react';
+import FalconIcon from './FalconIcon';
 
 export default function AuthLogin({ systemType, onAuthSuccess }) {
   const [session, setSession] = useState(null);
@@ -49,7 +49,7 @@ export default function AuthLogin({ systemType, onAuthSuccess }) {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
           <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
-            <Truck size={32} color="#d97706" />
+            <FalconIcon size={32} color="#d97706" />
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>
             {systemType === 'ceo' ? 'CEO Admin Login' : 'Rider Dispatch Login'}
