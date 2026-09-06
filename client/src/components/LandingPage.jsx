@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import './LandingPage.css';
 import FalconIcon from './FalconIcon';
 import { 
-  Truck,
   Package, 
   ShieldCheck, 
   Clock, 
@@ -203,37 +202,6 @@ export default function LandingPage({ onGoToApp }) {
               <div className="trust-item"><CheckCircle2 size={16} className="text-emerald" /> Same-Day Delivery</div>
               <div className="trust-item"><CheckCircle2 size={16} className="text-emerald" /> Real-time Tracking</div>
               <div className="trust-item"><CheckCircle2 size={16} className="text-emerald" /> Safe COD Handling</div>
-            </div>
-          </div>
-
-          <div className="hero-visual">
-            <div className="visual-card">
-              <div className="card-header-badge">
-                <span className="live-indicator"></span> Live Delivery Active
-              </div>
-              <div className="visual-illustration">
-                <div className="delivery-truck-circle">
-                  <Truck size={48} className="text-blue" />
-                </div>
-                <div className="route-line">
-                  <div className="route-dot start"></div>
-                  <div className="route-dot end"></div>
-                </div>
-              </div>
-              <div className="visual-info">
-                <div className="info-row">
-                  <span className="info-label">Route</span>
-                  <span className="info-val">Nairobi ➔ Machakos & Metro</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Dispatch Status</span>
-                  <span className="info-val status-badge">⚡ Instant Dispatch</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Care Level</span>
-                  <span className="info-val">100% Protected & Insured</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
