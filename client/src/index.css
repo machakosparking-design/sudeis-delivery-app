@@ -1667,4 +1667,197 @@ input:checked + .slider:before {
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Delivery Arrival & Handover Verification Styles */
+
+.arrival-alert-banner {
+  background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%);
+  color: #FFFFFF;
+  border-radius: 16px;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25);
+  animation: arrivalPulse 2s infinite alternate ease-in-out;
+}
+
+@keyframes arrivalPulse {
+  0% { box-shadow: 0 4px 15px rgba(2, 132, 199, 0.25); }
+  100% { box-shadow: 0 8px 25px rgba(2, 132, 199, 0.45); }
+}
+
+.btn-im-outside {
+  width: 100%;
+  padding: 0.85rem;
+  background: #25D366;
+  color: #FFFFFF !important;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.btn-im-outside:hover {
+  background: #20BD5A;
+}
+
+/* 4-Digit Security PIN Components */
+.pin-verification-box {
+  background: #F8FAFC;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.pin-verification-box.valid {
+  border-color: #10B981;
+  background: #ECFDF5;
+}
+
+.pin-verification-box.invalid {
+  border-color: #EF4444;
+  background: #FEF2F2;
+}
+
+.pin-input-field {
+  font-size: 1.8rem;
+  font-family: monospace;
+  font-weight: 800;
+  letter-spacing: 0.4em;
+  text-align: center;
+  width: 180px;
+  padding: 0.4rem 0.5rem;
+  border: 2px solid #CBD5E1;
+  border-radius: 10px;
+  background: #FFFFFF;
+  margin: 0.5rem auto;
+  display: block;
+}
+
+.pin-input-field:focus {
+  outline: none;
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.badge-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7C3AED;
+  background: #F5F3FF;
+  border: 1px solid #DDD6FE;
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+}
+
+/* Handover Recipient Selection */
+.handover-selector-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.handover-opt-btn {
+  flex: 1;
+  padding: 0.65rem 0.5rem;
+  border-radius: 12px;
+  border: 1.5px solid #CBD5E1;
+  background: #FFFFFF;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.handover-opt-btn.active {
+  border-color: #0F172A;
+  background: #0F172A;
+  color: #FFFFFF;
+}
+
+.quick-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.quick-chip-item {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 14px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-chip-item:hover, .quick-chip-item.active {
+  background: #EFF6FF;
+  border-color: #3B82F6;
+  color: #1D4ED8;
+}
+
+/* Status arrived badge */
+.status-badge.status-arrived {
+  background: #E0F2FE;
+  color: #0369A1;
+  border: 1px solid #BAE6FD;
+}
+
+.badge-arrived {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: #E0F2FE;
+  color: #0369A1;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #BAE6FD;
+}
+
+/* Post Delivery Receipt WhatsApp Button */
+.btn-send-receipt {
+  width: 100%;
+  padding: 0.9rem;
+  border-radius: 14px;
+  background: #25D366;
+  color: #FFFFFF !important;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+  margin-top: 0.75rem;
+}
+
+
 

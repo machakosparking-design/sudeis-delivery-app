@@ -28,7 +28,10 @@ import {
   Bell, 
   BellOff, 
   ArrowLeft,
-  Bike
+  Bike,
+  KeyRound,
+  Users,
+  Send
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { parseAddressAndNote } from '../utils/orderUtils';
@@ -126,6 +129,14 @@ export default function RiderApp({ riderCode }) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [currentCoords, setCurrentCoords] = useState(null);
   const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'today'
+
+  // Handover Confirmation State
+  const [inputPin, setInputPin] = useState('');
+  const [handoverTo, setHandoverTo] = useState('customer'); // 'customer' | 'other'
+  const [recipientRole, setRecipientRole] = useState('Security Guard');
+  const [recipientCustomName, setRecipientCustomName] = useState('');
+  const [cashConfirmed, setCashConfirmed] = useState(false);
+  const [lastDeliveredOrder, setLastDeliveredOrder] = useState(null);
 
   const watchIdRef = useRef(null);
   const prevActiveOrderIdRef = useRef(null);
@@ -358,11 +369,70 @@ export default function RiderApp({ riderCode }) {
     }
   };
 
-  const handleConfirmDelivered = async () => {
+  // Milestone: Driver Arrives at Customer Destination
+  const handleMarkArrived = async () => {
     if (!activeOrder) return;
     setIsProcessingAction(true);
     try {
-      await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeOrder.id);
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'arrived',
+          arrived_at: new Date().toISOString()
+        })
+        .eq('id', activeOrder.id);
+
+      if (error) {
+        // Fallback without arrived_at if column not added yet
+        await supabase.from('orders').update({ status: 'arrived' }).eq('id', activeOrder.id);
+      }
+
+      if (soundEnabled) playSoundCue('accept');
+      triggerHaptic([150, 50, 150]);
+      await fetchActiveOrder();
+    } catch (e) {
+      console.error('Error setting arrived status:', e);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  // Milestone: Handover & Complete Delivery
+  const handleConfirmDelivered = async () => {
+    if (!activeOrder) return;
+
+    // Check PIN validation if PIN is required
+    const targetPin = activeOrder.delivery_pin || dropoffInfo.pin;
+    if (targetPin && inputPin.trim() !== String(targetPin).trim()) {
+      alert('Invalid Customer PIN. Please ask the customer for the correct 4-digit code.');
+      return;
+    }
+
+    // Check Cash confirmation if COD
+    if (!isPrepaid && !cashConfirmed) {
+      alert(`Please confirm that you have collected KES ${activeOrder.fee} in cash from the recipient.`);
+      return;
+    }
+
+    setIsProcessingAction(true);
+    try {
+      const finalRecipient = handoverTo === 'customer'
+        ? `${activeOrder.customer_name} (Customer directly)`
+        : (recipientCustomName.trim() || `${recipientRole} on site`);
+
+      // Try updating with received_by column
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update({
+          status: 'delivered',
+          received_by: finalRecipient
+        })
+        .eq('id', activeOrder.id);
+
+      if (updateErr) {
+        // Fallback if received_by column is not yet in DB schema
+        await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeOrder.id);
+      }
       
       const newCount = (rider.orders_completed || 0) + 1;
       const newEarnings = Number(rider.earnings || 0) + Number(activeOrder.fee || 0);
@@ -383,7 +453,18 @@ export default function RiderApp({ riderCode }) {
       if (soundEnabled) playSoundCue('complete');
       triggerHaptic([100, 50, 100, 50, 200]);
 
+      // Save delivery details for post-delivery receipt card
+      setLastDeliveredOrder({
+        order_number: activeOrder.order_number || `#${activeOrder.id.slice(0, 8)}`,
+        customer_name: activeOrder.customer_name,
+        customer_phone: activeOrder.customer_phone,
+        recipient: finalRecipient,
+        fee: activeOrder.fee
+      });
+
       setIsCompletingModal(false);
+      setInputPin('');
+      setCashConfirmed(false);
       setActiveOrder(null);
       setIsAssignedToMe(false);
       await fetchRiderData();
@@ -410,8 +491,9 @@ export default function RiderApp({ riderCode }) {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  // Parse Dropoff Address & Personal Delivery Note
-  const dropoffInfo = activeOrder ? parseAddressAndNote(activeOrder.dropoff_address) : { address: '', note: null };
+  // Parse Dropoff Address, Personal Delivery Note, and PIN
+  const dropoffInfo = activeOrder ? parseAddressAndNote(activeOrder.dropoff_address) : { address: '', note: null, pin: null };
+  const targetPin = activeOrder ? (activeOrder.delivery_pin || dropoffInfo.pin) : null;
   const isPrepaid = activeOrder && (activeOrder.status === 'paid' || !!activeOrder.mpesa_receipt);
 
   // Filter Historical Orders
@@ -551,49 +633,58 @@ export default function RiderApp({ riderCode }) {
 
           {/* Receipts List */}
           <div className="earnings-history-list">
-            {filteredHistory.map(order => (
-              <div key={order.id} className="trip-receipt-card">
-                <div className="receipt-top-bar">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
-                      {order.order_number || `#${order.id.slice(0, 8)}`}
-                    </span>
-                    <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>•</span>
-                    <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
-                      {new Date(order.updated_at || order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            {filteredHistory.map(order => {
+              const parsed = parseAddressAndNote(order.dropoff_address);
+              return (
+                <div key={order.id} className="trip-receipt-card">
+                  <div className="receipt-top-bar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
+                        {order.order_number || `#${order.id.slice(0, 8)}`}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: '#94A3B8' }}>•</span>
+                      <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                        {new Date(order.updated_at || order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="receipt-fee">
+                      + KES {order.fee}
+                    </div>
                   </div>
-                  <div className="receipt-fee">
-                    + KES {order.fee}
+
+                  <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '0.95rem' }}>
+                    {order.customer_name}
                   </div>
-                </div>
 
-                <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '0.95rem' }}>
-                  {order.customer_name}
-                </div>
+                  <div style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>{order.pickup_address}</span>
+                    <ArrowRight size={12} style={{ color: '#94A3B8', flexShrink: 0 }} />
+                    <span style={{ color: '#2563EB', fontWeight: 600 }}>{parsed.address}</span>
+                  </div>
 
-                <div style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ color: '#059669', fontWeight: 600 }}>{order.pickup_address}</span>
-                  <ArrowRight size={12} style={{ color: '#94A3B8', flexShrink: 0 }} />
-                  <span style={{ color: '#2563EB', fontWeight: 600 }}>{parseAddressAndNote(order.dropoff_address).address}</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #F1F5F9' }}>
-                  <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                    {new Date(order.updated_at || order.created_at).toLocaleDateString()}
-                  </span>
-                  {order.mpesa_receipt ? (
-                    <span style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                      M-Pesa: {order.mpesa_receipt}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.7rem', background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                      Cash on Delivery
-                    </span>
+                  {order.received_by && (
+                    <div style={{ fontSize: '0.75rem', color: '#0369A1', background: '#F0F9FF', padding: '3px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                      <CheckCircle size={12} /> Received by: {order.received_by}
+                    </div>
                   )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #F1F5F9' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                      {new Date(order.updated_at || order.created_at).toLocaleDateString()}
+                    </span>
+                    {order.mpesa_receipt ? (
+                      <span style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                        M-Pesa: {order.mpesa_receipt}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.7rem', background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                        Cash on Delivery
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {filteredHistory.length === 0 && (
               <div style={{ textAlign: 'center', padding: '3rem 1rem', background: '#FFFFFF', borderRadius: '16px', border: '1px dashed #CBD5E1', color: '#94A3B8' }}>
@@ -715,6 +806,39 @@ export default function RiderApp({ riderCode }) {
 
       {/* Main Body Screen */}
       <main className="rider-body-content">
+        {/* SUCCESS CARD: Post-Delivery Handover Confirmation Receipt */}
+        {lastDeliveredOrder && !activeOrder && (
+          <div style={{ background: '#ECFDF5', border: '2px solid #10B981', borderRadius: '18px', padding: '1.25rem', marginBottom: '1.25rem', textAlign: 'center', animation: 'fadeInNote 0.3s ease' }}>
+            <CheckCircle size={36} style={{ color: '#059669', margin: '0 auto 0.5rem' }} />
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#065F46', marginBottom: '0.25rem' }}>
+              Delivery Handover Complete!
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: '#047857', marginBottom: '0.75rem' }}>
+              Order {lastDeliveredOrder.order_number} handed to <strong>{lastDeliveredOrder.recipient}</strong>. KES {lastDeliveredOrder.fee} added to your earnings.
+            </p>
+
+            {lastDeliveredOrder.customer_phone && (
+              <a
+                href={`https://wa.me/${formatKenyanPhone(lastDeliveredOrder.customer_phone)}?text=${encodeURIComponent(
+                  `Hello ${lastDeliveredOrder.customer_name}, your Falcon Delivery package (${lastDeliveredOrder.order_number}) has been delivered successfully by ${rider.name || 'your courier'}. (Received by: ${lastDeliveredOrder.recipient}). Thank you for choosing Falcon Delivery! 🦅`
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-send-receipt"
+              >
+                <MessageCircle size={18} /> Send Delivery Receipt on WhatsApp
+              </a>
+            )}
+
+            <button
+              onClick={() => setLastDeliveredOrder(null)}
+              style={{ marginTop: '0.75rem', background: 'transparent', border: 'none', color: '#047857', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Done / Ready for Next Order
+            </button>
+          </div>
+        )}
+
         {/* CASE A: INCOMING DELIVERY OFFER (Unassigned pending order available to accept) */}
         {activeOrder && !isAssignedToMe && (
           <div className="incoming-offer-card">
@@ -732,15 +856,22 @@ export default function RiderApp({ riderCode }) {
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1E293B' }}>
                 Order {activeOrder.order_number || `#${activeOrder.id.slice(0, 8)}`}
               </span>
-              {isPrepaid ? (
-                <span style={{ fontSize: '0.72rem', background: '#ECFDF5', color: '#059669', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                  Prepaid M-Pesa
-                </span>
-              ) : (
-                <span style={{ fontSize: '0.72rem', background: '#FFFBEB', color: '#D97706', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                  Cash on Delivery
-                </span>
-              )}
+              <div style={{ display: 'flex', gap: '5px' }}>
+                {targetPin && (
+                  <span className="badge-pin">
+                    <KeyRound size={11} /> PIN Required
+                  </span>
+                )}
+                {isPrepaid ? (
+                  <span style={{ fontSize: '0.72rem', background: '#ECFDF5', color: '#059669', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                    Prepaid M-Pesa
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.72rem', background: '#FFFBEB', color: '#D97706', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                    Cash on Delivery
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Route Timeline */}
@@ -800,8 +931,13 @@ export default function RiderApp({ riderCode }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.6rem' }}>
               <div>
                 <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>ACTIVE TRIP</span>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {activeOrder.order_number || `#${activeOrder.id.slice(0, 8)}`}
+                  {targetPin && (
+                    <span className="badge-pin" title="Customer must provide 4-digit PIN upon handover">
+                      <KeyRound size={11} /> PIN Protected
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -812,39 +948,51 @@ export default function RiderApp({ riderCode }) {
               </div>
             </div>
 
-            {/* 4-Step Order Lifecycle Stepper */}
-            <div className="rider-trip-stepper">
+            {/* 5-Step Order Lifecycle Stepper */}
+            <div className="rider-trip-stepper" style={{ padding: '0 0.2rem' }}>
+              {/* Step 1: Accepted */}
               <div className="stepper-step completed">
                 <div className="stepper-bubble">
-                  <Check size={14} />
+                  <Check size={12} />
                 </div>
                 <div className="stepper-label">Accepted</div>
               </div>
 
+              {/* Step 2: Pickup */}
               <div className={`stepper-step ${activeOrder.status === 'accepted' ? 'active' : 'completed'}`}>
                 <div className="stepper-bubble">
-                  {activeOrder.status === 'accepted' ? '2' : <Check size={14} />}
+                  {activeOrder.status === 'accepted' ? '2' : <Check size={12} />}
                 </div>
-                <div className="stepper-label">At Pickup</div>
+                <div className="stepper-label">Pickup</div>
               </div>
 
-              <div className={`stepper-step ${activeOrder.status === 'picked_up' ? 'active' : ''}`}>
+              {/* Step 3: Transit */}
+              <div className={`stepper-step ${activeOrder.status === 'picked_up' ? 'active' : activeOrder.status === 'arrived' ? 'completed' : ''}`}>
                 <div className="stepper-bubble">
-                  3
+                  {activeOrder.status === 'arrived' ? <Check size={12} /> : '3'}
                 </div>
-                <div className="stepper-label">In Transit</div>
+                <div className="stepper-label">Transit</div>
               </div>
 
-              <div className="stepper-step">
+              {/* Step 4: Arrived */}
+              <div className={`stepper-step ${activeOrder.status === 'arrived' ? 'active' : ''}`}>
                 <div className="stepper-bubble">
                   4
+                </div>
+                <div className="stepper-label">Arrived</div>
+              </div>
+
+              {/* Step 5: Delivered */}
+              <div className="stepper-step">
+                <div className="stepper-bubble">
+                  5
                 </div>
                 <div className="stepper-label">Delivered</div>
               </div>
             </div>
 
-            {/* Current Phase Mission Banner with 1-Tap Google Maps Navigation */}
-            {activeOrder.status === 'accepted' ? (
+            {/* Dynamic Mission Action Banners */}
+            {activeOrder.status === 'accepted' && (
               <div className="mission-action-banner">
                 <div className="mission-top-row">
                   <span className="mission-phase-badge">MISSION STEP 1: PICKUP</span>
@@ -863,13 +1011,15 @@ export default function RiderApp({ riderCode }) {
                   <Navigation size={18} /> OPEN GOOGLE MAPS TO PICKUP
                 </a>
               </div>
-            ) : (
+            )}
+
+            {activeOrder.status === 'picked_up' && (
               <div className="mission-action-banner">
                 <div className="mission-top-row">
                   <span className="mission-phase-badge" style={{ background: '#10B981' }}>
-                    MISSION STEP 2: DELIVER
+                    MISSION STEP 2: EN ROUTE TO CUSTOMER
                   </span>
-                  <span style={{ fontSize: '0.75rem', color: '#A7F3D0', fontWeight: 600 }}>Head to Customer</span>
+                  <span style={{ fontSize: '0.75rem', color: '#A7F3D0', fontWeight: 600 }}>Head to Destination</span>
                 </div>
                 <div className="mission-target-address">
                   {dropoffInfo.address}
@@ -884,6 +1034,40 @@ export default function RiderApp({ riderCode }) {
                 >
                   <Navigation size={18} /> OPEN GOOGLE MAPS TO CUSTOMER
                 </a>
+              </div>
+            )}
+
+            {activeOrder.status === 'arrived' && (
+              <div className="arrival-alert-banner">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, background: '#FFFFFF', color: '#0284C7', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    📍 AT DESTINATION
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#E0F2FE', fontWeight: 600 }}>
+                    Parcel Reached Spot
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#FFFFFF' }}>
+                  {dropoffInfo.address}
+                </div>
+                <p style={{ fontSize: '0.8rem', color: '#E0F2FE', margin: '0' }}>
+                  You have arrived outside. Please alert the customer and hand over the parcel.
+                </p>
+
+                {/* 1-Tap WhatsApp "I'm Outside" Alert */}
+                {activeOrder.customer_phone && (
+                  <a
+                    href={`https://wa.me/${formatKenyanPhone(activeOrder.customer_phone)}?text=${encodeURIComponent(
+                      `Hello ${activeOrder.customer_name}, this is your Falcon Delivery rider ${rider.name || ''}. I have arrived outside with your package (${activeOrder.order_number || activeOrder.id.slice(0, 8)}). Please meet me to receive it!`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-im-outside"
+                    title="Alert customer via WhatsApp that you are outside"
+                  >
+                    <MessageCircle size={18} /> Alert Customer: "I'm Outside" (WhatsApp)
+                  </a>
+                )}
               </div>
             )}
 
@@ -969,7 +1153,7 @@ export default function RiderApp({ riderCode }) {
               </div>
             </div>
 
-            {/* CEO Personal Delivery Note (If added during dispatch) */}
+            {/* CEO Personal Delivery Note */}
             {dropoffInfo.note && (
               <div className="rider-instruction-card">
                 <FileText size={20} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
@@ -984,7 +1168,22 @@ export default function RiderApp({ riderCode }) {
               </div>
             )}
 
-            {/* Payment Responsibility Notice (HIGH VISIBILITY FOR KENYAN RIDERS) */}
+            {/* PIN Security Notice if required */}
+            {targetPin && (
+              <div style={{ background: '#F5F3FF', border: '1.5px solid #DDD6FE', borderRadius: '14px', padding: '0.85rem 1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <KeyRound size={22} style={{ color: '#7C3AED', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6D28D9', textTransform: 'uppercase' }}>
+                    🔑 4-Digit PIN Protected
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#5B21B6', fontWeight: 600 }}>
+                    Customer must provide their 4-digit Falcon Delivery code to verify receipt.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Responsibility Notice */}
             {isPrepaid ? (
               <div className="rider-payment-box paid">
                 <ShieldCheck size={24} style={{ color: '#059669', flexShrink: 0, marginTop: '2px' }} />
@@ -1016,7 +1215,7 @@ export default function RiderApp({ riderCode }) {
               </div>
             )}
 
-            {/* Primary Bottom Lifecycle Action Button */}
+            {/* Primary Action Buttons depending on Phase */}
             {activeOrder.status === 'accepted' && (
               <button 
                 onClick={handleMarkPickedUp}
@@ -1029,11 +1228,36 @@ export default function RiderApp({ riderCode }) {
 
             {activeOrder.status === 'picked_up' && (
               <button 
+                onClick={handleMarkArrived}
+                disabled={isProcessingAction}
+                style={{
+                  width: '100%',
+                  padding: '1.1rem',
+                  borderRadius: '16px',
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.6rem',
+                  background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                  color: '#FFFFFF',
+                  boxShadow: '0 6px 20px rgba(2, 132, 199, 0.35)'
+                }}
+              >
+                <MapPin size={22} /> 📍 I HAVE ARRIVED AT DESTINATION
+              </button>
+            )}
+
+            {activeOrder.status === 'arrived' && (
+              <button 
                 onClick={() => setIsCompletingModal(true)}
                 disabled={isProcessingAction}
                 className="btn-trip-lifecycle delivered"
               >
-                <CheckCircle size={22} /> COMPLETE DELIVERY TRIP
+                <CheckCircle size={22} /> 🤝 HANDOVER & VERIFY DELIVERY
               </button>
             )}
           </div>
@@ -1068,8 +1292,8 @@ export default function RiderApp({ riderCode }) {
                 <Zap size={14} style={{ color: '#F59E0B' }} /> Pro-Rider Tips:
               </div>
               <ul style={{ fontSize: '0.78rem', color: '#64748B', paddingLeft: '1.2rem', lineHeight: 1.5 }}>
-                <li>Keep screen active while on the road.</li>
-                <li>Ensure phone volume is up for audio chimes.</li>
+                <li>Tap <strong>"I Have Arrived"</strong> when outside customer gate.</li>
+                <li>Verify 4-digit PIN with customer if order is PIN-protected.</li>
                 <li>Always confirm cash collection before completing COD trips.</li>
               </ul>
             </div>
@@ -1113,50 +1337,144 @@ export default function RiderApp({ riderCode }) {
       </main>
 
       {/* ─────────────────────────────────────────────────────────────────────────
-          CONFIRMATION MODAL: Complete Delivery
-          Prevents accidental pocket taps when on motorbikes
+          CONFIRMATION MODAL: Handover & Delivery Verification (Option C: Hybrid)
          ───────────────────────────────────────────────────────────────────────── */}
       {isCompletingModal && activeOrder && (
         <div className="rider-modal-backdrop" onClick={() => setIsCompletingModal(false)}>
-          <div className="rider-modal-card" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0F172A' }}>
-                Complete Delivery Trip?
-              </h3>
+          <div className="rider-modal-card" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0F172A' }}>
+                  Handover Verification
+                </h3>
+                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Confirm customer received parcel
+                </span>
+              </div>
               <span style={{ fontSize: '0.8rem', fontWeight: 700, background: '#F1F5F9', color: '#475569', padding: '3px 8px', borderRadius: '6px' }}>
                 {activeOrder.order_number || `#${activeOrder.id.slice(0, 8)}`}
               </span>
             </div>
 
-            <div style={{ background: '#F8FAFC', borderRadius: '14px', padding: '1rem', marginBottom: '1rem', border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748B' }}>Recipient:</div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1E293B', marginBottom: '0.5rem' }}>
-                {activeOrder.customer_name}
+            {/* SECTION 1: 4-Digit PIN Verification (If required) */}
+            {targetPin && (
+              <div className={`pin-verification-box ${inputPin.trim() === String(targetPin).trim() ? 'valid' : inputPin.length === 4 ? 'invalid' : ''}`}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 700, color: '#4C1D95' }}>
+                  <KeyRound size={16} /> Enter 4-Digit Customer PIN:
+                </div>
+                <input 
+                  type="text"
+                  maxLength={4}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  placeholder="••••"
+                  value={inputPin}
+                  onChange={e => setInputPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="pin-input-field"
+                  autoFocus
+                />
+                {inputPin.trim() === String(targetPin).trim() ? (
+                  <div style={{ color: '#059669', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <CheckCircle size={14} /> PIN Verified Successfully!
+                  </div>
+                ) : inputPin.length === 4 ? (
+                  <div style={{ color: '#DC2626', fontSize: '0.78rem', fontWeight: 700 }}>
+                    ❌ Incorrect PIN. Ask customer for Falcon Delivery code.
+                  </div>
+                ) : (
+                  <div style={{ color: '#64748B', fontSize: '0.72rem' }}>
+                    Ask customer for their 4-digit Falcon Delivery code
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SECTION 2: Who Received the Package? */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Users size={14} /> Who received the package?
+              </div>
+              <div className="handover-selector-group">
+                <button 
+                  type="button"
+                  className={`handover-opt-btn ${handoverTo === 'customer' ? 'active' : ''}`}
+                  onClick={() => setHandoverTo('customer')}
+                >
+                  <User size={15} /> Customer Directly
+                </button>
+                <button 
+                  type="button"
+                  className={`handover-opt-btn ${handoverTo === 'other' ? 'active' : ''}`}
+                  onClick={() => setHandoverTo('other')}
+                >
+                  <Users size={15} /> Someone Else
+                </button>
               </div>
 
-              <div style={{ fontSize: '0.8rem', color: '#64748B' }}>Destination:</div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#334155' }}>
-                {dropoffInfo.address}
-              </div>
+              {handoverTo === 'other' && (
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '4px' }}>Quick Select:</div>
+                  <div className="quick-chips-row">
+                    {['Security Guard', 'Receptionist', 'Family Member', 'Housekeeper', 'Colleague'].map(chip => (
+                      <button
+                        key={chip}
+                        type="button"
+                        className={`quick-chip-item ${recipientRole === chip ? 'active' : ''}`}
+                        onClick={() => { setRecipientRole(chip); setRecipientCustomName(`${chip}`); }}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input 
+                    type="text"
+                    placeholder="e.g. Mary (Security Guard)"
+                    value={recipientCustomName}
+                    onChange={e => setRecipientCustomName(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.75rem',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      marginTop: '0.6rem'
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Payment Check Before Finishing */}
+            {/* SECTION 3: Payment Responsibility Confirmation */}
             {isPrepaid ? (
               <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <ShieldCheck size={20} style={{ color: '#059669', flexShrink: 0 }} />
                 <span style={{ fontSize: '0.82rem', color: '#065F46', fontWeight: 600 }}>
-                  Prepaid Order: Payment already received via M-Pesa.
+                  Prepaid Order: Payment confirmed via M-Pesa. Do NOT collect cash.
                 </span>
               </div>
             ) : (
-              <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <Banknote size={20} style={{ color: '#D97706', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.82rem', color: '#92400E', fontWeight: 700 }}>
-                  Ensure you collected KES {activeOrder.fee} cash from the customer!
-                </span>
+              <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox"
+                    checked={cashConfirmed}
+                    onChange={e => setCashConfirmed(e.target.checked)}
+                    style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: '#D97706' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '0.88rem', color: '#92400E', fontWeight: 800 }}>
+                      💵 Cash on Delivery: KES {activeOrder.fee}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#78350F' }}>
+                      I confirm I have collected KES {activeOrder.fee} in cash from the recipient.
+                    </div>
+                  </div>
+                </label>
               </div>
             )}
 
+            {/* Action Buttons */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '0.75rem' }}>
               <button 
                 onClick={() => setIsCompletingModal(false)}
@@ -1176,20 +1494,28 @@ export default function RiderApp({ riderCode }) {
 
               <button 
                 onClick={handleConfirmDelivered}
-                disabled={isProcessingAction}
+                disabled={
+                  isProcessingAction || 
+                  (targetPin && inputPin.trim() !== String(targetPin).trim()) ||
+                  (!isPrepaid && !cashConfirmed)
+                }
                 style={{
                   padding: '0.9rem',
                   borderRadius: '12px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  background: (targetPin && inputPin.trim() !== String(targetPin).trim()) || (!isPrepaid && !cashConfirmed)
+                    ? '#94A3B8'
+                    : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
                   color: '#FFFFFF',
                   fontWeight: 700,
                   fontSize: '0.95rem',
-                  cursor: 'pointer',
+                  cursor: (targetPin && inputPin.trim() !== String(targetPin).trim()) || (!isPrepaid && !cashConfirmed)
+                    ? 'not-allowed'
+                    : 'pointer',
                   boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
                 }}
               >
-                {isProcessingAction ? 'Finishing...' : 'Yes, Order Delivered'}
+                {isProcessingAction ? 'Finishing...' : 'Confirm Handover'}
               </button>
             </div>
           </div>

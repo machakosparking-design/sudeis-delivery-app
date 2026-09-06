@@ -5,7 +5,7 @@ import {
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
   Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
-  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText
+  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText, KeyRound
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -89,7 +89,9 @@ export default function CEOAdminPanel() {
     pickup: '', pickupLat: null, pickupLng: null,
     dropoff: '', dropoffLat: null, dropoffLng: null, 
     fee: '',
-    deliveryNote: ''
+    deliveryNote: '',
+    requirePin: false,
+    deliveryPin: ''
   });
   const [showSingleNote, setShowSingleNote] = useState(false);
   const [showBatchNote, setShowBatchNote] = useState(false);
@@ -324,9 +326,13 @@ export default function CEOAdminPanel() {
     const dropoffLat = formData.dropoffLat || -1.2921 + (Math.random() * 0.01 - 0.005);
     const dropoffLng = formData.dropoffLng || 36.8219 + (Math.random() * 0.01 - 0.005);
 
-    const finalDropoff = formatDropoffWithNote(formData.dropoff, formData.deliveryNote);
+    const finalDropoff = formatDropoffWithNote(
+      formData.dropoff, 
+      formData.deliveryNote,
+      formData.requirePin ? formData.deliveryPin : null
+    );
 
-    const { data, error } = await supabase.from('orders').insert([{
+    const orderPayload = {
       order_number: `ORD-${Date.now()}`,
       customer_name: formData.customerName,
       customer_phone: formData.customerPhone,
@@ -338,7 +344,19 @@ export default function CEOAdminPanel() {
       dropoff_lng: dropoffLng,
       fee: parseFloat(formData.fee),
       status: 'pending'
-    }]).select();
+    };
+
+    if (formData.requirePin && formData.deliveryPin) {
+      orderPayload.delivery_pin = formData.deliveryPin;
+    }
+
+    let { data, error } = await supabase.from('orders').insert([orderPayload]).select();
+    if (error && orderPayload.delivery_pin) {
+      delete orderPayload.delivery_pin;
+      const retry = await supabase.from('orders').insert([orderPayload]).select();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (!error) {
       const createdOrder = data?.[0];
@@ -347,7 +365,9 @@ export default function CEOAdminPanel() {
         pickup: '', pickupLat: null, pickupLng: null,
         dropoff: '', dropoffLat: null, dropoffLng: null, 
         fee: '',
-        deliveryNote: ''
+        deliveryNote: '',
+        requirePin: false,
+        deliveryPin: ''
       });
       setShowSingleNote(false);
 
@@ -405,10 +425,9 @@ export default function CEOAdminPanel() {
       const dLng = 36.8219 + (Math.random() * 0.01 - 0.005);
 
       const merchantPrefix = batchMerchant.trim() ? `${batchMerchant.trim()} · ` : '';
-      const pickupAddress = `${merchantPrefix}${batchPickupData.pickup || 'Pickup'}`;
-      const dropoffAddress = formatDropoffWithNote(item.dropoff, item.description);
+      const dropoffAddress = formatDropoffWithNote(item.dropoff, item.description, item.deliveryPin || null);
 
-      return {
+      const orderObj = {
         order_number: `ORD-${baseTimestamp}-${idx + 1}`,
         customer_name: item.customerName.trim(),
         customer_phone: item.customerPhone?.trim() || '',
@@ -421,9 +440,24 @@ export default function CEOAdminPanel() {
         fee: parseFloat(item.fee) || 0,
         status: 'pending'
       };
+
+      if (item.deliveryPin) {
+        orderObj.delivery_pin = item.deliveryPin;
+      }
+
+      return orderObj;
     });
 
-    const { error } = await supabase.from('orders').insert(ordersToInsert);
+    let { error } = await supabase.from('orders').insert(ordersToInsert);
+    if (error && ordersToInsert.some(o => o.delivery_pin)) {
+      const fallbackOrders = ordersToInsert.map(o => {
+        const copy = { ...o };
+        delete copy.delivery_pin;
+        return copy;
+      });
+      const retry = await supabase.from('orders').insert(fallbackOrders);
+      error = retry.error;
+    }
 
     if (!error) {
       alert(`🎉 Dispatched batch of ${ordersToInsert.length} orders to riders!`);
@@ -1214,6 +1248,50 @@ export default function CEOAdminPanel() {
                 )}
               </div>
 
+              {/* Optional 4-Digit Security PIN */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '0.65rem 0.85rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
+                    <input 
+                      type="checkbox"
+                      checked={formData.requirePin || false}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setFormData(prev => ({
+                          ...prev,
+                          requirePin: checked,
+                          deliveryPin: checked ? (prev.deliveryPin || Math.floor(1000 + Math.random() * 9000).toString()) : ''
+                        }));
+                      }}
+                      style={{ accentColor: '#7C3AED', width: '15px', height: '15px' }}
+                    />
+                    <KeyRound size={14} color="#7C3AED" />
+                    <span>Require 4-Digit Delivery PIN</span>
+                  </label>
+
+                  {formData.requirePin && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.95rem', color: '#6D28D9', background: '#EDE9FE', padding: '2px 8px', borderRadius: '6px' }}>
+                        {formData.deliveryPin}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, deliveryPin: Math.floor(1000 + Math.random() * 9000).toString() }))}
+                        style={{ background: 'none', border: 'none', color: '#6D28D9', cursor: 'pointer', padding: '2px' }}
+                        title="Generate new PIN"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {formData.requirePin && (
+                  <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '4px', paddingLeft: '23px' }}>
+                    Customer must provide this 4-digit PIN to the driver upon delivery.
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-2">
                 <div className="form-group w-full">
                   <label>Phone</label>
@@ -1495,12 +1573,24 @@ export default function CEOAdminPanel() {
           {filteredActiveOrders.map(order => {
             const isPaid = order.status === 'paid' || !!order.mpesa_receipt;
             const parsedDropoff = parseAddressAndNote(order.dropoff_address);
+            const orderPin = order.delivery_pin || parsedDropoff.pin;
             
             return (
-              <div key={order.id} className="order-card-item" style={{ borderLeftColor: isPaid ? '#10B981' : 'var(--secondary-color)' }}>
+              <div key={order.id} className="order-card-item" style={{ borderLeftColor: isPaid ? '#10B981' : order.status === 'arrived' ? '#0284C7' : 'var(--secondary-color)' }}>
                 <div className="flex justify-between items-center mb-1">
                   <strong style={{ fontSize: '0.92rem' }}>{order.customer_name}</strong>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {orderPin && (
+                      <span 
+                        className="badge-pin" 
+                        onClick={() => copyToClipboard(orderPin, order.id + '-pin')}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to copy delivery PIN"
+                      >
+                        <KeyRound size={11} /> PIN: {orderPin}
+                        {copiedOrderId === order.id + '-pin' && <Check size={11} color="#059669" />}
+                      </span>
+                    )}
                     {isPaid ? (
                       <span className="badge-paid">
                         <CheckCircle size={11} /> PAID
@@ -1510,9 +1600,15 @@ export default function CEOAdminPanel() {
                         <Clock size={11} /> UNPAID
                       </span>
                     )}
-                    <span className={`status-badge status-${order.status === 'paid' ? 'online' : 'busy'}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
-                      {order.status}
-                    </span>
+                    {order.status === 'arrived' ? (
+                      <span className="badge-arrived">
+                        <MapPin size={11} /> ARRIVED
+                      </span>
+                    ) : (
+                      <span className={`status-badge status-${order.status === 'paid' ? 'online' : 'busy'}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                        {order.status}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1526,6 +1622,12 @@ export default function CEOAdminPanel() {
                   <div className="note-pill">
                     <FileText size={11} color="#3B82F6" />
                     <span>Note: {parsedDropoff.note}</span>
+                  </div>
+                )}
+
+                {order.received_by && (
+                  <div style={{ fontSize: '0.74rem', color: '#0369A1', background: '#F0F9FF', padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px', margin: '2px 0 4px' }}>
+                    <CheckCircle size={11} /> Handed to: {order.received_by}
                   </div>
                 )}
 
