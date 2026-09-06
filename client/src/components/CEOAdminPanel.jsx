@@ -5,7 +5,7 @@ import {
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
   Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
-  CheckCircle, Receipt, AlertCircle, Loader2
+  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -119,8 +119,10 @@ export default function CEOAdminPanel() {
     amount: '',
     phone: ''
   });
-  const [stkStatus, setStkStatus] = useState(null); // 'loading', 'success', 'error'
+  const [stkStatus, setStkStatus] = useState(null); // null, 'sending', 'awaiting_pin', 'paid', 'timeout', 'error'
   const [stkMessage, setStkMessage] = useState('');
+  const [stkCountdown, setStkCountdown] = useState(60);
+  const [stkPaidDetails, setStkPaidDetails] = useState({ receipt: '', amount: '' });
 
   // Payment Realtime Toast Banner
   const [paymentToast, setPaymentToast] = useState(null);
@@ -158,13 +160,24 @@ export default function CEOAdminPanel() {
               setPaymentToast({
                 customer: payload.new.customer_name,
                 amount: payload.new.fee,
-                receipt: payload.new.mpesa_receipt || 'Received',
+                receipt: payload.new.mpesa_receipt || 'Confirmed',
                 orderNumber: payload.new.order_number
               });
               setTimeout(() => setPaymentToast(null), 8000);
             }
             return prev.map(o => o.id === payload.new.id ? payload.new : o);
           });
+
+          // Check if the currently open modal's order just got paid
+          if (stkModalData.isOpen && stkModalData.orderId === payload.new.id) {
+            if (payload.new.status === 'paid' || payload.new.mpesa_receipt) {
+              setStkStatus('paid');
+              setStkPaidDetails({
+                receipt: payload.new.mpesa_receipt || 'Confirmed',
+                amount: payload.new.fee
+              });
+            }
+          }
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, payload => {
@@ -190,7 +203,50 @@ export default function CEOAdminPanel() {
       supabase.removeChannel(dbChannel);
       supabase.removeChannel(gpsChannel);
     };
-  }, []);
+  }, [stkModalData.isOpen, stkModalData.orderId]);
+
+  // ── Polling and Countdown when Awaiting PIN ──────────────────────────────────
+  useEffect(() => {
+    if (stkStatus !== 'awaiting_pin') return;
+
+    setStkCountdown(60);
+    const countdownTimer = setInterval(() => {
+      setStkCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownTimer);
+          setStkStatus('timeout');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Active polling every 2.5s for the order status
+    const pollTimer = setInterval(async () => {
+      if (!stkModalData.orderId) return;
+
+      const { data } = await supabase
+        .from('orders')
+        .select('status, mpesa_receipt, fee')
+        .eq('id', stkModalData.orderId)
+        .maybeSingle();
+
+      if (data && (data.status === 'paid' || data.mpesa_receipt)) {
+        clearInterval(pollTimer);
+        clearInterval(countdownTimer);
+        setStkStatus('paid');
+        setStkPaidDetails({
+          receipt: data.mpesa_receipt || 'Confirmed',
+          amount: data.fee
+        });
+      }
+    }, 2500);
+
+    return () => {
+      clearInterval(countdownTimer);
+      clearInterval(pollTimer);
+    };
+  }, [stkStatus, stkModalData.orderId]);
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -225,11 +281,12 @@ export default function CEOAdminPanel() {
         dropoff: '', dropoffLat: null, dropoffLng: null, 
         fee: '' 
       });
-      alert("Order dispatched to riders!");
 
-      // Option: Prompt if they want to trigger STK immediately
-      if (createdOrder && createdOrder.customer_phone) {
+      // Automatically open the STK Push prompt for the newly created order
+      if (createdOrder) {
         openStkModal(createdOrder);
+      } else {
+        alert("Order dispatched to riders!");
       }
     } else {
       alert("Error dispatching order: " + error.message);
@@ -329,7 +386,7 @@ export default function CEOAdminPanel() {
     setStkMessage('');
   };
 
-  // ── Open STK Modal from Dispatch Form (Single Order) ───────────────────────
+  // ── Open STK Modal from Dispatch Form ─────────────────────────────────────
   const openDispatchFormStkModal = () => {
     if (!formData.customerPhone || !formData.fee) {
       alert("Please enter customer phone and fee in the dispatch form first.");
@@ -347,17 +404,17 @@ export default function CEOAdminPanel() {
     setStkMessage('');
   };
 
-  // ── Send M-Pesa STK Push from Modal ───────────────────────────────────────
+  // ── Send M-Pesa STK Push ──────────────────────────────────────────────────
   const handleSendStkPush = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!stkModalData.phone || !stkModalData.amount) {
       setStkStatus('error');
       setStkMessage('Phone number and amount are required.');
       return;
     }
 
-    setStkStatus('loading');
-    setStkMessage('Sending STK prompt to customer phone...');
+    setStkStatus('sending');
+    setStkMessage('Connecting to Safaricom Daraja...');
 
     try {
       const { data, error } = await supabase.functions.invoke('mpesa-stk', {
@@ -373,19 +430,69 @@ export default function CEOAdminPanel() {
         throw new Error(data.error || 'Failed to trigger STK push');
       }
 
-      setStkStatus('success');
-      setStkMessage(`STK push sent to ${stkModalData.phone}! Awaiting customer PIN on phone.`);
-      
-      // Auto-close modal after 3.5 seconds on success
-      setTimeout(() => {
-        setStkModalData(prev => ({ ...prev, isOpen: false }));
-        setStkStatus(null);
-      }, 3500);
+      // If backend returned checkoutRequestId, ensure it is saved on order directly
+      if (data?.checkoutRequestId && stkModalData.orderId) {
+        await supabase
+          .from('orders')
+          .update({ mpesa_checkout_id: data.checkoutRequestId })
+          .eq('id', stkModalData.orderId);
+      }
+
+      // Transition to active awaiting PIN state (DO NOT CLOSE MODAL)
+      setStkStatus('awaiting_pin');
+      setStkMessage(`STK prompt sent to ${stkModalData.phone}. Customer is entering PIN...`);
 
     } catch (err) {
       console.error('STK Push Error:', err);
       setStkStatus('error');
       setStkMessage(err.message || 'M-Pesa STK push request failed.');
+    }
+  };
+
+  // ── Manual Payment Confirmation ───────────────────────────────────────────
+  const handleManualPaymentConfirm = async (orderId) => {
+    if (!orderId) return;
+    const receipt = window.prompt("Enter M-Pesa Receipt Code or reference (or leave blank for CASH):", "CASH");
+    if (receipt === null) return;
+
+    const { error } = await supabase
+      .from('orders')
+      .update({ 
+        status: 'paid', 
+        mpesa_receipt: receipt.trim() || 'CASH' 
+      })
+      .eq('id', orderId);
+
+    if (!error) {
+      if (stkModalData.isOpen && stkModalData.orderId === orderId) {
+        setStkStatus('paid');
+        setStkPaidDetails({
+          receipt: receipt.trim() || 'CASH',
+          amount: stkModalData.amount
+        });
+      }
+    } else {
+      alert("Error marking order as paid: " + error.message);
+    }
+  };
+
+  // ── Check Payment Status On Demand ────────────────────────────────────────
+  const handleManualCheck = async () => {
+    if (!stkModalData.orderId) return;
+    const { data } = await supabase
+      .from('orders')
+      .select('status, mpesa_receipt, fee')
+      .eq('id', stkModalData.orderId)
+      .maybeSingle();
+
+    if (data && (data.status === 'paid' || data.mpesa_receipt)) {
+      setStkStatus('paid');
+      setStkPaidDetails({
+        receipt: data.mpesa_receipt || 'Confirmed',
+        amount: data.fee
+      });
+    } else {
+      alert("Payment has not been confirmed yet. Please wait for customer to enter PIN.");
     }
   };
 
@@ -417,7 +524,6 @@ export default function CEOAdminPanel() {
     orders: rider.orders_completed || 0
   }));
 
-  // List of all received payments for Finance dashboard
   const paidOrdersList = orders.filter(o => o.status === 'paid' || o.mpesa_receipt);
 
   if (activeTab === 'finance') {
@@ -539,12 +645,24 @@ export default function CEOAdminPanel() {
         </div>
       )}
 
-      {/* STK Push Confirmation Modal */}
+      {/* STK Push Confirmation & Live Status Modal */}
       {stkModalData.isOpen && (
-        <div className="modal-backdrop" onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}>
+        <div className="modal-backdrop" onClick={() => {
+          if (stkStatus !== 'sending') {
+            setStkModalData(prev => ({ ...prev, isOpen: false }));
+          }
+        }}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3><Smartphone size={18} color="#10B981" /> Send M-Pesa STK Push</h3>
+              <h3>
+                {stkStatus === 'paid' ? (
+                  <><CheckCircle size={20} color="#10B981" /> Payment Confirmed</>
+                ) : stkStatus === 'awaiting_pin' ? (
+                  <><Smartphone size={20} color="#3B82F6" /> Waiting for M-Pesa PIN</>
+                ) : (
+                  <><Smartphone size={20} color="#10B981" /> Send M-Pesa STK Push</>
+                )}
+              </h3>
               <button 
                 type="button" 
                 onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}
@@ -554,82 +672,193 @@ export default function CEOAdminPanel() {
               </button>
             </div>
 
-            <form onSubmit={handleSendStkPush}>
-              <div className="modal-body">
-                {/* Order Summary Box */}
-                <div style={{ backgroundColor: '#F8FAFC', padding: '0.85rem', borderRadius: '10px', border: '1px solid #E2E8F0', marginBottom: '1.25rem' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Order Summary</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
-                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{stkModalData.customerName}</span>
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748B' }}>{stkModalData.orderNumber}</span>
-                  </div>
+            {/* SCREEN 1: Awaiting PIN State */}
+            {stkStatus === 'awaiting_pin' ? (
+              <div className="modal-body" style={{ textAlign: 'center', padding: '1.75rem 1.5rem' }}>
+                <div style={{ width: '68px', height: '68px', borderRadius: '50%', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto' }}>
+                  <Loader2 size={36} color="#2563EB" className="animate-spin" />
+                </div>
+                
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', marginBottom: '0.4rem' }}>
+                  STK Prompt Sent!
+                </h4>
+                
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                  A prompt for <strong>KES {stkModalData.amount}</strong> was sent to <strong>{stkModalData.phone}</strong>.<br/>
+                  Waiting for customer to enter their PIN on their phone.
+                </p>
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F1F5F9', padding: '0.35rem 0.85rem', borderRadius: '20px', fontSize: '0.78rem', color: '#64748B', fontWeight: 700, marginBottom: '1.5rem' }}>
+                  <Clock size={13} /> Waiting: {stkCountdown}s
                 </div>
 
-                {/* Status / Feedback Banner */}
-                {stkStatus === 'loading' && (
-                  <div style={{ backgroundColor: '#EFF6FF', color: '#1E40AF', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-                    <Loader2 size={16} className="animate-spin" /> {stkMessage}
-                  </div>
-                )}
-                {stkStatus === 'success' && (
-                  <div style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: 600 }}>
-                    <CheckCircle size={16} /> {stkMessage}
-                  </div>
-                )}
-                {stkStatus === 'error' && (
-                  <div style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: 600 }}>
-                    <AlertCircle size={16} /> {stkMessage}
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    onClick={handleManualCheck}
+                    style={{ width: '100%' }}
+                  >
+                    <RefreshCw size={14} /> Check Status Now
+                  </button>
+                  
+                  {stkModalData.orderId && (
+                    <button 
+                      type="button" 
+                      className="btn btn-outline-dark"
+                      onClick={() => handleManualPaymentConfirm(stkModalData.orderId)}
+                      style={{ width: '100%', fontSize: '0.8rem' }}
+                    >
+                      Customer Paid Cash / Manual Confirm
+                    </button>
+                  )}
 
-                {/* Editable Phone Field */}
-                <div className="form-group">
-                  <label>Customer Safaricom Number</label>
-                  <input 
-                    type="text" 
-                    className="form-control" 
-                    value={stkModalData.phone}
-                    onChange={(e) => setStkModalData({ ...stkModalData, phone: e.target.value })}
-                    placeholder="e.g. 0712345678 or 254..."
-                    required
-                  />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
-                    You can change this number if the customer wishes to pay using another M-Pesa line.
-                  </span>
-                </div>
-
-                {/* Editable Amount Field */}
-                <div className="form-group">
-                  <label>Amount to Charge (KES)</label>
-                  <input 
-                    type="number" 
-                    className="form-control font-bold" 
-                    value={stkModalData.amount}
-                    onChange={(e) => setStkModalData({ ...stkModalData, amount: e.target.value })}
-                    style={{ fontSize: '1.1rem', color: '#16A34A' }}
-                    required
-                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setStkStatus(null)}
+                    style={{ background: 'none', border: 'none', color: '#64748B', fontSize: '0.8rem', cursor: 'pointer', marginTop: '0.25rem' }}
+                  >
+                    Change Phone Number / Resend
+                  </button>
                 </div>
               </div>
+            ) : stkStatus === 'paid' ? (
+              /* SCREEN 2: Payment Received Success Screen */
+              <div className="modal-body" style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
+                <div style={{ width: '72px', height: '72px', borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto' }}>
+                  <CheckCircle size={40} color="#15803D" />
+                </div>
+                
+                <h4 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#15803D', marginBottom: '0.3rem' }}>
+                  Payment Received!
+                </h4>
+                
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0F172A', marginBottom: '0.5rem' }}>
+                  KES {stkPaidDetails.amount}
+                </div>
 
-              <div className="modal-footer">
+                <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '0.65rem 1rem', borderRadius: '8px', display: 'inline-block', marginBottom: '1.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>M-Pesa Receipt</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#1E40AF', fontSize: '1rem' }}>{stkPaidDetails.receipt}</span>
+                </div>
+
                 <button 
                   type="button" 
-                  className="btn btn-outline-dark" 
+                  className="btn btn-success"
                   onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}
-                  disabled={stkStatus === 'loading'}
+                  style={{ width: '100%', padding: '0.75rem' }}
                 >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-success" 
-                  disabled={stkStatus === 'loading'}
-                >
-                  {stkStatus === 'loading' ? 'Sending...' : 'Send STK Push Now'}
+                  Done
                 </button>
               </div>
-            </form>
+            ) : stkStatus === 'timeout' ? (
+              /* SCREEN 3: Timeout Screen */
+              <div className="modal-body" style={{ textAlign: 'center', padding: '1.75rem 1.5rem' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                  <AlertCircle size={32} color="#D97706" />
+                </div>
+                
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0F172A', marginBottom: '0.5rem' }}>
+                  Payment Timed Out
+                </h4>
+                
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+                  Customer did not enter their PIN within 60 seconds or cancelled the prompt.
+                </p>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    onClick={handleSendStkPush}
+                    style={{ flex: 1 }}
+                  >
+                    Retry STK Push
+                  </button>
+                  {stkModalData.orderId && (
+                    <button 
+                      type="button" 
+                      className="btn btn-outline-dark"
+                      onClick={() => handleManualPaymentConfirm(stkModalData.orderId)}
+                      style={{ flex: 1 }}
+                    >
+                      Cash / Manual
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* SCREEN 4: Initial Trigger Form */
+              <form onSubmit={handleSendStkPush}>
+                <div className="modal-body">
+                  {/* Order Summary Box */}
+                  <div style={{ backgroundColor: '#F8FAFC', padding: '0.85rem', borderRadius: '10px', border: '1px solid #E2E8F0', marginBottom: '1.25rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Order Summary</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                      <span style={{ fontWeight: 700, color: '#0F172A' }}>{stkModalData.customerName}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748B' }}>{stkModalData.orderNumber}</span>
+                    </div>
+                  </div>
+
+                  {stkStatus === 'error' && (
+                    <div style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '0.75rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', fontWeight: 600 }}>
+                      <AlertCircle size={16} /> {stkMessage}
+                    </div>
+                  )}
+
+                  {/* Editable Phone Field */}
+                  <div className="form-group">
+                    <label>Customer Safaricom Number</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={stkModalData.phone}
+                      onChange={(e) => setStkModalData({ ...stkModalData, phone: e.target.value })}
+                      placeholder="e.g. 0712345678 or 254..."
+                      required
+                    />
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
+                      Edit this number if the customer is paying with another M-Pesa line.
+                    </span>
+                  </div>
+
+                  {/* Editable Amount Field */}
+                  <div className="form-group">
+                    <label>Amount to Charge (KES)</label>
+                    <input 
+                      type="number" 
+                      className="form-control font-bold" 
+                      value={stkModalData.amount}
+                      onChange={(e) => setStkModalData({ ...stkModalData, amount: e.target.value })}
+                      style={{ fontSize: '1.1rem', color: '#16A34A' }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button 
+                    type="button" 
+                    className="btn btn-outline-dark" 
+                    onClick={() => setStkModalData(prev => ({ ...prev, isOpen: false }))}
+                    disabled={stkStatus === 'sending'}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-success" 
+                    disabled={stkStatus === 'sending'}
+                  >
+                    {stkStatus === 'sending' ? (
+                      <><Loader2 size={15} className="animate-spin" /> Sending...</>
+                    ) : (
+                      <><Smartphone size={15} /> Send STK Prompt</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1049,7 +1278,7 @@ export default function CEOAdminPanel() {
                       {copiedOrderId === order.id ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
                     </button>
                     
-                    {/* Trigger STK Push modal if not yet paid */}
+                    {/* Trigger STK Push modal or show Paid state */}
                     {!isPaid ? (
                       <button 
                         type="button"
