@@ -5,10 +5,11 @@ import {
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
   Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
-  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw
+  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { parseAddressAndNote, formatDropoffWithNote } from '../utils/orderUtils';
 
 // Format phone for Kenya (wa.me and display)
 const formatKenyanPhone = (phone) => {
@@ -87,8 +88,11 @@ export default function CEOAdminPanel() {
     customerName: '', customerPhone: '', 
     pickup: '', pickupLat: null, pickupLng: null,
     dropoff: '', dropoffLat: null, dropoffLng: null, 
-    fee: '' 
+    fee: '',
+    deliveryNote: ''
   });
+  const [showSingleNote, setShowSingleNote] = useState(false);
+  const [showBatchNote, setShowBatchNote] = useState(false);
 
   // Batch Multi-Order State
   const [dispatchMode, setDispatchMode] = useState('single'); // 'single' or 'batch'
@@ -320,6 +324,8 @@ export default function CEOAdminPanel() {
     const dropoffLat = formData.dropoffLat || -1.2921 + (Math.random() * 0.01 - 0.005);
     const dropoffLng = formData.dropoffLng || 36.8219 + (Math.random() * 0.01 - 0.005);
 
+    const finalDropoff = formatDropoffWithNote(formData.dropoff, formData.deliveryNote);
+
     const { data, error } = await supabase.from('orders').insert([{
       order_number: `ORD-${Date.now()}`,
       customer_name: formData.customerName,
@@ -327,7 +333,7 @@ export default function CEOAdminPanel() {
       pickup_address: formData.pickup,
       pickup_lat: pickupLat,
       pickup_lng: pickupLng,
-      dropoff_address: formData.dropoff,
+      dropoff_address: finalDropoff,
       dropoff_lat: dropoffLat,
       dropoff_lng: dropoffLng,
       fee: parseFloat(formData.fee),
@@ -340,8 +346,10 @@ export default function CEOAdminPanel() {
         customerName: '', customerPhone: '', 
         pickup: '', pickupLat: null, pickupLng: null,
         dropoff: '', dropoffLat: null, dropoffLng: null, 
-        fee: '' 
+        fee: '',
+        deliveryNote: ''
       });
+      setShowSingleNote(false);
 
       // Automatically open the STK Push prompt for the newly created order
       if (createdOrder) {
@@ -376,6 +384,7 @@ export default function CEOAdminPanel() {
       fee: '',
       description: ''
     });
+    setShowBatchNote(false);
   };
 
   const handleRemoveBatchItem = (id) => {
@@ -397,9 +406,7 @@ export default function CEOAdminPanel() {
 
       const merchantPrefix = batchMerchant.trim() ? `${batchMerchant.trim()} · ` : '';
       const pickupAddress = `${merchantPrefix}${batchPickupData.pickup || 'Pickup'}`;
-      const dropoffAddress = item.description?.trim() 
-        ? `${item.dropoff.trim()} (${item.description.trim()})`
-        : item.dropoff.trim();
+      const dropoffAddress = formatDropoffWithNote(item.dropoff, item.description);
 
       return {
         order_number: `ORD-${baseTimestamp}-${idx + 1}`,
@@ -461,6 +468,8 @@ export default function CEOAdminPanel() {
     const dropoffLat = formData.dropoffLat || -1.2921 + (Math.random() * 0.01 - 0.005);
     const dropoffLng = formData.dropoffLng || 36.8219 + (Math.random() * 0.01 - 0.005);
 
+    const finalDropoff = formatDropoffWithNote(formData.dropoff || 'Delivery', formData.deliveryNote);
+
     const { data, error } = await supabase.from('orders').insert([{
       order_number: `ORD-${Date.now()}`,
       customer_name: formData.customerName,
@@ -468,7 +477,7 @@ export default function CEOAdminPanel() {
       pickup_address: formData.pickup || 'Pickup',
       pickup_lat: pickupLat,
       pickup_lng: pickupLng,
-      dropoff_address: formData.dropoff || 'Delivery',
+      dropoff_address: finalDropoff,
       dropoff_lat: dropoffLat,
       dropoff_lng: dropoffLng,
       fee: parseFloat(formData.fee),
@@ -487,8 +496,10 @@ export default function CEOAdminPanel() {
       customerName: '', customerPhone: '', 
       pickup: '', pickupLat: null, pickupLng: null,
       dropoff: '', dropoffLat: null, dropoffLng: null, 
-      fee: '' 
+      fee: '',
+      deliveryNote: ''
     });
+    setShowSingleNote(false);
 
     // 2. Open modal with real order details!
     setStkModalData({
@@ -1150,6 +1161,59 @@ export default function CEOAdminPanel() {
                 </div>
               </div>
 
+              {/* Personal / Delivery Note (Optional) */}
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ margin: 0, fontSize: '0.82rem' }}>
+                    Personal Note / Instructions <span style={{ color: 'var(--text-secondary)', fontWeight: 400, fontSize: '0.72rem' }}>(Optional)</span>
+                  </label>
+                  {!showSingleNote && !formData.deliveryNote && (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowSingleNote(true)}
+                      style={{ background: 'none', border: 'none', color: 'var(--secondary-color)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      <Plus size={12} /> Add Note
+                    </button>
+                  )}
+                </div>
+                
+                {showSingleNote || formData.deliveryNote ? (
+                  <div className="note-input-container">
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      name="deliveryNote" 
+                      value={formData.deliveryNote} 
+                      onChange={handleInputChange} 
+                      placeholder="e.g. Gate code #402, fragile item, call recipient..."
+                      style={{ paddingRight: '2rem', fontSize: '0.84rem' }}
+                      autoFocus
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, deliveryNote: '' }));
+                        setShowSingleNote(false);
+                      }}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                      title="Clear & close note"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    className="note-toggle-box"
+                    onClick={() => setShowSingleNote(true)}
+                    title="Click to write delivery note or personal instructions"
+                  >
+                    <FileText size={13} color="#64748B" />
+                    <span>+ Add delivery note or personal instructions (Optional)</span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-2">
                 <div className="form-group w-full">
                   <label>Phone</label>
@@ -1249,21 +1313,29 @@ export default function CEOAdminPanel() {
                   </div>
                 ) : (
                   batchItems.map((item, idx) => (
-                    <div key={item.id} className="batch-item-row">
-                      <div>
-                        <strong>{idx + 1}. {item.customerName}</strong> → {item.dropoff}
-                        {item.customerPhone && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px' }}>({item.customerPhone})</span>}
+                    <div key={item.id} className="batch-item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <strong>{idx + 1}. {item.customerName}</strong> → {item.dropoff}
+                          {item.customerPhone && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px' }}>({item.customerPhone})</span>}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, color: '#16A34A' }}>KES {item.fee}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => handleRemoveBatchItem(item.id)}
+                            style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer' }}
+                            title="Remove delivery"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 700, color: '#16A34A' }}>KES {item.fee}</span>
-                        <button 
-                          type="button" 
-                          onClick={() => handleRemoveBatchItem(item.id)}
-                          style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {item.description && (
+                        <div style={{ fontSize: '0.74rem', color: '#1E40AF', backgroundColor: '#EFF6FF', padding: '0.15rem 0.45rem', borderRadius: '4px', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                          <FileText size={11} color="#3B82F6" /> Note: {item.description}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -1315,6 +1387,47 @@ export default function CEOAdminPanel() {
                       onChange={(e) => setNewBatchItem({ ...newBatchItem, fee: e.target.value })}
                     />
                   </div>
+                </div>
+
+                {/* Optional Note for Batch Item */}
+                <div className="form-group" style={{ marginTop: '0.35rem', marginBottom: '0.75rem' }}>
+                  {showBatchNote || newBatchItem.description ? (
+                    <div className="note-input-container">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                        <label style={{ margin: 0, fontSize: '0.78rem' }}>Order Note / Instructions (Optional)</label>
+                      </div>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        placeholder="e.g. Leave at reception, call recipient before arrival..."
+                        value={newBatchItem.description}
+                        onChange={(e) => setNewBatchItem({ ...newBatchItem, description: e.target.value })}
+                        style={{ paddingRight: '2rem', fontSize: '0.82rem' }}
+                        autoFocus
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setNewBatchItem(prev => ({ ...prev, description: '' }));
+                          setShowBatchNote(false);
+                        }}
+                        style={{ position: 'absolute', right: '8px', top: '65%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+                        title="Remove note"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div 
+                      className="note-toggle-box"
+                      onClick={() => setShowBatchNote(true)}
+                      style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem' }}
+                      title="Click to write special instructions for this delivery"
+                    >
+                      <FileText size={12} color="#64748B" />
+                      <span>+ Add note / instructions for this recipient (Optional)</span>
+                    </div>
+                  )}
                 </div>
 
                 <button type="submit" className="btn btn-outline-dark w-full" style={{ marginBottom: '0.75rem' }}>
@@ -1381,6 +1494,7 @@ export default function CEOAdminPanel() {
 
           {filteredActiveOrders.map(order => {
             const isPaid = order.status === 'paid' || !!order.mpesa_receipt;
+            const parsedDropoff = parseAddressAndNote(order.dropoff_address);
             
             return (
               <div key={order.id} className="order-card-item" style={{ borderLeftColor: isPaid ? '#10B981' : 'var(--secondary-color)' }}>
@@ -1405,8 +1519,15 @@ export default function CEOAdminPanel() {
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', margin: '4px 0' }}>
                   <span>{order.pickup_address}</span>
                   <ArrowRight size={12} />
-                  <span>{order.dropoff_address}</span>
+                  <span>{parsedDropoff.address}</span>
                 </div>
+
+                {parsedDropoff.note && (
+                  <div className="note-pill">
+                    <FileText size={11} color="#3B82F6" />
+                    <span>Note: {parsedDropoff.note}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between items-center" style={{ fontSize: '0.85rem' }}>
                   <span className="font-bold text-green">KES {order.fee}</span>

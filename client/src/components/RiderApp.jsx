@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Navigation, CheckCircle, Package, DollarSign, ListOrdered, Wallet, Phone, MessageCircle, Copy, Check } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Package, DollarSign, ListOrdered, Wallet, Phone, MessageCircle, Copy, Check, FileText } from 'lucide-react';
 import { supabase } from '../supabase';
+import { parseAddressAndNote } from '../utils/orderUtils';
 
 const formatKenyanPhone = (phone) => {
   if (!phone) return '';
@@ -207,7 +208,7 @@ export default function RiderApp({ riderCode }) {
                 <div>
                   <div className="text-xs text-gray-400 font-semibold mb-1">{new Date(order.updated_at).toLocaleDateString()}</div>
                   <div className="font-bold text-gray-800">{order.customer_name}</div>
-                  <div className="text-xs text-gray-500 mt-1 max-w-[200px] truncate">{order.pickup_address} → {order.dropoff_address}</div>
+                  <div className="text-xs text-gray-500 mt-1 max-w-[200px] truncate">{order.pickup_address} → {parseAddressAndNote(order.dropoff_address).address}</div>
                 </div>
                 <div className="text-right">
                   <div className="font-bold text-green-600 text-lg">KES {order.fee}</div>
@@ -314,13 +315,28 @@ export default function RiderApp({ riderCode }) {
               </div>
             </div>
             
-            <div className="mb-6 flex items-start gap-3 bg-blue-50 p-3 rounded-lg">
-              <MapPin size={20} className="text-blue-500 mt-0.5" />
+            <div className="mb-4 flex items-start gap-3 bg-blue-50 p-3 rounded-lg">
+              <MapPin size={20} className="text-blue-500 mt-0.5 shrink-0" />
               <div>
                 <div className="font-bold text-xs text-blue-500 tracking-wider mb-1">DROPOFF</div>
-                <div className="font-medium text-gray-800">{activeOrder.dropoff_address}</div>
+                <div className="font-medium text-gray-800">{parseAddressAndNote(activeOrder.dropoff_address).address}</div>
               </div>
             </div>
+
+            {/* Delivery Instructions / Personal Note from CEO */}
+            {parseAddressAndNote(activeOrder.dropoff_address).note && (
+              <div className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-xs">
+                <FileText size={20} className="text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-bold text-[10px] text-amber-800 tracking-wider mb-0.5 uppercase">
+                    Delivery Instructions / Note
+                  </div>
+                  <div className="font-semibold text-amber-950 text-sm">
+                    {parseAddressAndNote(activeOrder.dropoff_address).note}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {activeOrder.status === 'pending' && (
               <button className="btn btn-primary w-full justify-center py-4 text-lg shadow-md hover:shadow-lg transition-all" onClick={handleAccept}>
