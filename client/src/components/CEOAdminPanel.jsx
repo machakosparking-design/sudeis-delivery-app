@@ -4,8 +4,7 @@ import L from 'leaflet';
 import { 
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
-  ListPlus, ListChecks, Layers, Phone, MessageCircle, Copy, Check,
-  ArrowRight
+  ListPlus, ListChecks, Layers, Phone, MessageCircle, Copy, Check 
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -90,7 +89,7 @@ export default function CEOAdminPanel() {
     fee: '' 
   });
 
-  // Batch Multi-Order State (e.g. Merchant "Hannan" with multiple dropoffs)
+  // Batch Multi-Order State
   const [dispatchMode, setDispatchMode] = useState('single'); // 'single' or 'batch'
   const [batchMerchant, setBatchMerchant] = useState('Hannan');
   const [batchPickupData, setBatchPickupData] = useState({
@@ -200,7 +199,6 @@ export default function CEOAdminPanel() {
     }
   };
 
-  // ── Batch Handlers ────────────────────────────────────────────────────────
   const handleAddBatchItem = (e) => {
     e.preventDefault();
     if (!newBatchItem.customerName || !newBatchItem.dropoff || !newBatchItem.fee) {
@@ -216,7 +214,6 @@ export default function CEOAdminPanel() {
       }
     ]);
 
-    // Reset only the recipient-specific fields for quick consecutive entry
     setNewBatchItem({
       customerName: '',
       dropoff: '',
@@ -293,8 +290,6 @@ export default function CEOAdminPanel() {
         body: { 
           phone: formData.customerPhone, 
           amount: formData.fee,
-          // Pass the orderId so the edge function can save the CheckoutRequestID
-          // to the order for reliable callback reconciliation
           orderId: orderId 
         }
       });
@@ -322,111 +317,67 @@ export default function CEOAdminPanel() {
 
   if (activeTab === 'transactions') {
     return (
-      <div className="p-6 bg-gray-50 h-full overflow-y-auto w-full absolute top-0 left-0 z-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Financial Dashboard</h1>
-            <div className="flex gap-4">
-              <button className="bg-white hover:bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm border border-gray-200 font-bold transition-all flex items-center gap-2" onClick={() => setActiveTab('dispatch')}>
-                <MapIcon size={18} className="text-blue-600" /> Live Map
-              </button>
-              <button className="bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-md font-bold flex items-center gap-2">
-                <LayoutDashboard size={18} /> Finance
-              </button>
+      <div className="finance-dashboard">
+        <div className="finance-header">
+          <h1 className="finance-title">Financial Dashboard</h1>
+          <div className="finance-actions">
+            <button className="btn-outline-vanilla" onClick={() => setActiveTab('dispatch')}>
+              <MapIcon size={18} style={{ color: '#2563eb' }} /> Live Map
+            </button>
+            <button className="btn-primary-vanilla">
+              <LayoutDashboard size={18} /> Finance
+            </button>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '1rem', borderLeft: '4px solid #2563eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total Gross Revenue</div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 900, color: '#0f172a' }}>KES {totalEarnings}</div>
+            </div>
+            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '1rem', borderLeft: '4px solid #10b981', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total Deliveries</div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 900, color: '#0f172a' }}>{totalOrders}</div>
+            </div>
+            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '1rem', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Active Fleet</div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 900, color: '#0f172a' }}>{activeRiders} / {Object.keys(riders).length || 3}</div>
             </div>
           </div>
 
-          {/* Metrics */}
-          <div className="grid grid-cols-3 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-blue-600">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Gross Revenue</div>
-              <div className="text-4xl font-black text-gray-900">KES {totalEarnings}</div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Total Deliveries</div>
-              <div className="text-4xl font-black text-gray-900">{totalOrders}</div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Active Fleet</div>
-              <div className="text-4xl font-black text-gray-900">{activeRiders} / {Object.keys(riders).length || 3}</div>
-            </div>
-          </div>
-
-          {/* Charts */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-900 text-lg mb-6 flex items-center gap-2">
-                <DollarSign size={20} className="text-blue-600"/> Gross Revenue by Rider
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.125rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <DollarSign size={20} style={{ color: '#2563eb' }}/> Gross Revenue by Rider
               </h3>
-              <div style={{ width: '100%', height: 300 }}>
+              <div style={{ width: '100%', height: '300px' }}>
                 <ResponsiveContainer>
                   <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} tickFormatter={(value) => `KES ${value}`} />
-                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB' }} />
                     <Bar dataKey="grossRevenue" fill="#2563EB" radius={[6, 6, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-900 text-lg mb-6 flex items-center gap-2">
-                <Activity size={20} className="text-green-500"/> Completed Orders by Rider
+            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.125rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Activity size={20} style={{ color: '#10b981' }}/> Completed Orders by Rider
               </h3>
-              <div style={{ width: '100%', height: 300 }}>
+              <div style={{ width: '100%', height: '300px' }}>
                 <ResponsiveContainer>
                   <BarChart data={riderStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
-                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                    <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB' }} />
                     <Bar dataKey="orders" fill="#10B981" radius={[6, 6, 0, 0]} barSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          </div>
-
-          {/* Order History */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-900 text-lg mb-4">Historical Transactions</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-gray-100 text-gray-400 text-xs uppercase tracking-wider">
-                    <th className="p-3 font-bold">Order #</th>
-                    <th className="p-3 font-bold">Customer</th>
-                    <th className="p-3 font-bold">Route</th>
-                    <th className="p-3 font-bold">Rider</th>
-                    <th className="p-3 font-bold">Gross Fee</th>
-                    <th className="p-3 font-bold">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {orders.filter(o => o.status === 'delivered').map(order => (
-                    <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="p-3 font-mono font-medium text-gray-500">{order.order_number}</td>
-                      <td className="p-3 font-bold text-gray-900">{order.customer_name}</td>
-                      <td className="p-3 text-gray-600">
-                        <div className="truncate max-w-xs flex items-center gap-2">
-                          <MapPin size={14} className="text-gray-400" /> {order.pickup_address} <ArrowRight size={14} className="text-gray-300" /> {order.dropoff_address}
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
-                          {riders[order.assigned_rider_id]?.name || 'Unknown'}
-                        </span>
-                      </td>
-                      <td className="p-3 font-black text-green-600">KES {order.fee}</td>
-                      <td className="p-3 text-gray-400">{new Date(order.updated_at).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                  {orders.filter(o => o.status === 'delivered').length === 0 && (
-                    <tr><td colSpan="6" className="text-center p-8 text-gray-400 font-medium">No transactions recorded yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
@@ -435,20 +386,20 @@ export default function CEOAdminPanel() {
   }
 
   return (
-    <div className="flex flex-1 h-[calc(100vh-74px)] bg-gray-100 overflow-hidden relative w-full">
+    <div className="ceo-panel-container">
       {/* Sidebar Panel */}
-      <div className="w-full md:w-[450px] bg-white border-r border-gray-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.03)] z-10">
+      <div className="ceo-sidebar">
         
         {/* Sidebar Tabs */}
-        <div className="flex border-b border-gray-200 bg-gray-50">
+        <div className="ceo-tabs">
           <button 
-            className={`flex-1 py-4 text-sm font-black transition-all flex items-center justify-center gap-2 tracking-wide uppercase ${activeSidebarTab === 'dispatch' ? 'text-blue-700 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+            className={`ceo-tab-btn ${activeSidebarTab === 'dispatch' ? 'active' : ''}`}
             onClick={() => setActiveSidebarTab('dispatch')}
           >
             <Package size={18} /> Dispatch
           </button>
           <button 
-            className={`flex-1 py-4 text-sm font-black transition-all flex items-center justify-center gap-2 tracking-wide uppercase ${activeSidebarTab === 'orders' ? 'text-blue-700 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+            className={`ceo-tab-btn ${activeSidebarTab === 'orders' ? 'active' : ''}`}
             onClick={() => setActiveSidebarTab('orders')}
           >
             <ListChecks size={18} /> Active ({orders.length})
@@ -456,21 +407,21 @@ export default function CEOAdminPanel() {
         </div>
 
         {/* Sidebar Content (Scrollable) */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="ceo-sidebar-content">
           {activeSidebarTab === 'dispatch' && (
-            <div className="p-5 space-y-6">
+            <div>
               {/* Dispatch Mode Switcher */}
-              <div className="bg-gray-200/70 p-1.5 rounded-xl flex shadow-inner">
+              <div className="mode-switcher">
                 <button
                   type="button"
-                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${dispatchMode === 'single' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                  className={`mode-btn ${dispatchMode === 'single' ? 'active' : ''}`}
                   onClick={() => setDispatchMode('single')}
                 >
                   <Package size={16} /> Single Route
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${dispatchMode === 'batch' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                  className={`mode-btn ${dispatchMode === 'batch' ? 'active' : ''}`}
                   onClick={() => setDispatchMode('batch')}
                 >
                   <Layers size={16} /> Batch (Multi)
@@ -479,143 +430,108 @@ export default function CEOAdminPanel() {
 
               {/* Forms */}
               {dispatchMode === 'single' ? (
-                <form onSubmit={handleDispatch} className="space-y-4">
-                  <div>
-                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Customer Name</label>
-                    <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
+                <form onSubmit={handleDispatch}>
+                  <div className="input-group">
+                    <label className="input-label">Customer Name</label>
+                    <input type="text" className="custom-input" name="customerName" value={formData.customerName} onChange={handleInputChange} required />
                   </div>
 
-                  <div>
-                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Pickup Location</label>
-                    <div className="flex gap-2">
-                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
+                  <div className="input-group">
+                    <label className="input-label">Pickup Location</label>
+                    <div className="input-with-btn">
+                      <input type="text" className="custom-input" name="pickup" value={formData.pickup} onChange={handleInputChange} required />
                       <button type="button" 
-                        className={`p-3 rounded-xl transition-all shadow-sm ${mapClickMode === 'pickup' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`} 
+                        className={`map-pick-btn ${mapClickMode === 'pickup' ? 'active' : ''}`} 
                         onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
                         title="Click map to set">
                         <MousePointerClick size={20} />
                       </button>
                     </div>
-                    {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 mt-2 font-bold animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click anywhere on map to set pickup...</div>}
                   </div>
 
-                  <div>
-                    <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Delivery Location</label>
-                    <div className="flex gap-2">
-                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
+                  <div className="input-group">
+                    <label className="input-label">Delivery Location</label>
+                    <div className="input-with-btn">
+                      <input type="text" className="custom-input" name="dropoff" value={formData.dropoff} onChange={handleInputChange} required />
                       <button type="button" 
-                        className={`p-3 rounded-xl transition-all shadow-sm ${mapClickMode === 'dropoff' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`} 
+                        className={`map-pick-btn ${mapClickMode === 'dropoff' ? 'active' : ''}`} 
                         onClick={() => setMapClickMode(mapClickMode === 'dropoff' ? null : 'dropoff')}
                         title="Click map to set">
                         <MousePointerClick size={20} />
                       </button>
                     </div>
-                    {mapClickMode === 'dropoff' && <div className="text-xs text-blue-600 mt-2 font-bold animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click anywhere on map to set delivery...</div>}
                   </div>
 
-                  <div className="flex gap-4">
-                    <div className="w-full">
-                      <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Phone</label>
-                      <input type="text" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
+                  <div className="grid-2">
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label className="input-label">Phone</label>
+                      <input type="text" className="custom-input" name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required placeholder="2547..." />
                     </div>
-                    <div className="w-full">
-                      <label className="text-[11px] text-gray-500 block mb-1.5 font-bold uppercase tracking-wider">Fee (KES)</label>
-                      <input type="number" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm font-medium font-black text-green-700" name="fee" value={formData.fee} onChange={handleInputChange} required />
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label className="input-label">Fee (KES)</label>
+                      <input type="number" className="custom-input" name="fee" value={formData.fee} onChange={handleInputChange} required style={{ fontWeight: 900, color: '#15803d' }} />
                     </div>
                   </div>
-                  <div className="flex gap-3 pt-4">
-                    <button type="submit" className="flex-1 py-3.5 bg-gray-900 text-white rounded-xl shadow-lg hover:bg-gray-800 transition-all font-bold text-sm flex justify-center items-center gap-2">
+                  <div className="action-row">
+                    <button type="submit" className="btn-dispatch">
                       <Send size={18} /> Dispatch Now
                     </button>
-                    <button type="button" className="px-6 py-3.5 bg-green-500 text-white rounded-xl shadow-lg shadow-green-500/20 hover:bg-green-600 transition-all font-bold text-sm flex justify-center items-center gap-2" onClick={() => triggerMpesa(null)} title="Send M-Pesa request">
+                    <button type="button" className="btn-pay" onClick={() => triggerMpesa(null)} title="Send M-Pesa request">
                       <Smartphone size={18} /> 
                       {paymentStatus === 'loading' ? '...' : paymentStatus === 'success' ? 'Sent!' : 'Pay'}
                     </button>
                   </div>
                 </form>
               ) : (
-                <div className="space-y-5">
+                <div>
                   {/* Merchant & Pickup Header */}
-                  <div className="bg-blue-50/70 p-5 rounded-2xl border border-blue-100 space-y-4">
-                    <div className="text-xs font-black text-blue-900 uppercase tracking-widest flex items-center justify-between">
-                      <div className="flex items-center gap-2"><MapPin size={16} className="text-blue-600" /> Sender Profile</div>
-                      <span className="text-[10px] bg-blue-100 px-2 py-1 rounded-full text-blue-700 font-bold">Common Pickup</span>
+                  <div className="batch-header">
+                    <div className="batch-header-title">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><MapPin size={14} /> Sender Profile</span>
+                      <span className="batch-tag">Common Pickup</span>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-[11px] text-blue-800/70 block mb-1.5 font-bold uppercase tracking-wider">Merchant / Client Name</label>
-                        <input
-                          type="text"
-                          className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-bold text-gray-800 shadow-sm"
-                          placeholder="e.g. Hannan"
-                          value={batchMerchant}
-                          onChange={(e) => setBatchMerchant(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] text-blue-800/70 block mb-1.5 font-bold uppercase tracking-wider">Pickup Location</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-medium text-gray-800 shadow-sm"
-                            placeholder="e.g. CBD Shop #4"
-                            value={batchPickupData.pickup}
-                            onChange={(e) => setBatchPickupData({ ...batchPickupData, pickup: e.target.value })}
-                          />
-                          <button
-                            type="button"
-                            className={`p-2.5 rounded-xl transition-all shadow-sm ${mapClickMode === 'pickup' ? 'bg-blue-600 text-white shadow-blue-600/30' : 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50'}`}
-                            onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')}
-                            title="Pick on map"
-                          >
-                            <MousePointerClick size={20} />
-                          </button>
-                        </div>
-                        {mapClickMode === 'pickup' && <div className="text-xs text-blue-600 font-bold mt-2 animate-pulse flex items-center gap-1"><MousePointerClick size={14}/> Click map to set batch pickup location...</div>}
+                    <div className="input-group">
+                      <label className="input-label" style={{ color: '#1e40af' }}>Merchant / Client Name</label>
+                      <input type="text" className="custom-input" placeholder="e.g. Hannan" value={batchMerchant} onChange={(e) => setBatchMerchant(e.target.value)} />
+                    </div>
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label className="input-label" style={{ color: '#1e40af' }}>Pickup Location</label>
+                      <div className="input-with-btn">
+                        <input type="text" className="custom-input" placeholder="e.g. CBD Shop #4" value={batchPickupData.pickup} onChange={(e) => setBatchPickupData({ ...batchPickupData, pickup: e.target.value })} />
+                        <button type="button" className={`map-pick-btn ${mapClickMode === 'pickup' ? 'active' : ''}`} onClick={() => setMapClickMode(mapClickMode === 'pickup' ? null : 'pickup')} title="Pick on map">
+                          <MousePointerClick size={20} />
+                        </button>
                       </div>
                     </div>
                   </div>
 
                   {/* Queued Deliveries List */}
-                  <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="bg-gray-50 px-5 py-3 flex justify-between items-center border-b border-gray-100">
-                      <span className="text-[11px] font-black text-gray-600 uppercase tracking-wider">Deliveries ({batchItems.length})</span>
-                      <span className="text-green-600 font-black text-sm">
-                        KES {batchItems.reduce((acc, i) => acc + (parseFloat(i.fee) || 0), 0)}
-                      </span>
+                  <div className="batch-list-container">
+                    <div className="batch-list-header">
+                      <span className="batch-list-title">Deliveries ({batchItems.length})</span>
+                      <span className="batch-list-total">KES {batchItems.reduce((acc, i) => acc + (parseFloat(i.fee) || 0), 0)}</span>
                     </div>
-                    <div className="max-h-[200px] overflow-y-auto divide-y divide-gray-50">
+                    <div className="batch-list-items">
                       {batchItems.length === 0 ? (
-                        <div className="text-center py-8 text-sm text-gray-400 font-medium">
-                          No deliveries added yet.
-                        </div>
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.875rem' }}>No deliveries added yet.</div>
                       ) : (
                         batchItems.map((item, idx) => (
-                          <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
-                            <div className="flex items-center gap-3 flex-1 min-w-0 mr-3">
-                              <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-black flex items-center justify-center text-xs shrink-0">
-                                {idx + 1}
-                              </span>
-                              <div className="truncate">
-                                <div className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                          <div key={item.id} className="batch-item">
+                            <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: '0.75rem' }}>
+                              <div className="batch-item-index">{idx + 1}</div>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#0f172a', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                   {item.customerName}
-                                  {item.customerPhone && (
-                                    <span className="text-gray-400 font-medium text-xs font-mono">({item.customerPhone})</span>
-                                  )}
+                                  {item.customerPhone && <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.75rem', fontFamily: 'monospace' }}>({item.customerPhone})</span>}
                                 </div>
-                                <div className="text-gray-500 text-xs truncate mt-1 flex items-center gap-1.5 font-medium">
-                                  <MapPin size={12} className="text-gray-400"/> {item.dropoff} {item.description && <span className="text-gray-400">· {item.description}</span>}
+                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {item.dropoff} {item.description && <span>· {item.description}</span>}
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4 shrink-0">
-                              <span className="font-black text-green-600 text-sm">KES {item.fee}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveBatchItem(item.id)}
-                                className="text-gray-300 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                                title="Remove"
-                              >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                              <span style={{ fontWeight: 900, color: '#16a34a', fontSize: '0.875rem' }}>KES {item.fee}</span>
+                              <button type="button" onClick={() => handleRemoveBatchItem(item.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}>
                                 <Trash2 size={16} />
                               </button>
                             </div>
@@ -626,76 +542,27 @@ export default function CEOAdminPanel() {
                   </div>
 
                   {/* Add Delivery Stop Form */}
-                  <form onSubmit={handleAddBatchItem} className="bg-white p-5 rounded-2xl border border-dashed border-gray-300 space-y-4 hover:border-gray-400 transition-colors">
-                    <div className="text-[11px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                      <Plus size={14} /> Add Dropoff Stop
+                  <form onSubmit={handleAddBatchItem} className="batch-form">
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 900, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>+ Add Dropoff Stop</div>
+                    <div className="grid-2">
+                      <input type="text" className="custom-input" placeholder="Customer Name" value={newBatchItem.customerName} onChange={(e) => setNewBatchItem({ ...newBatchItem, customerName: e.target.value })} />
+                      <input type="text" className="custom-input" placeholder="Destination (e.g. Majengo)" value={newBatchItem.dropoff} onChange={(e) => setNewBatchItem({ ...newBatchItem, dropoff: e.target.value })} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <input
-                        type="text"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
-                        placeholder="Customer Name"
-                        value={newBatchItem.customerName}
-                        onChange={(e) => setNewBatchItem({ ...newBatchItem, customerName: e.target.value })}
-                      />
-                      <input
-                        type="text"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
-                        placeholder="Destination (e.g. Majengo)"
-                        value={newBatchItem.dropoff}
-                        onChange={(e) => setNewBatchItem({ ...newBatchItem, dropoff: e.target.value })}
-                      />
+                    <div className="grid-3">
+                      <input type="text" className="custom-input" placeholder="Phone" value={newBatchItem.customerPhone} onChange={(e) => setNewBatchItem({ ...newBatchItem, customerPhone: e.target.value })} />
+                      <input type="number" className="custom-input" placeholder="Fee" value={newBatchItem.fee} onChange={(e) => setNewBatchItem({ ...newBatchItem, fee: e.target.value })} style={{ fontWeight: 900, color: '#15803d' }} />
+                      <input type="text" className="custom-input" placeholder="Note (Opt)" value={newBatchItem.description} onChange={(e) => setNewBatchItem({ ...newBatchItem, description: e.target.value })} />
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <input
-                        type="text"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
-                        placeholder="Phone"
-                        value={newBatchItem.customerPhone}
-                        onChange={(e) => setNewBatchItem({ ...newBatchItem, customerPhone: e.target.value })}
-                      />
-                      <input
-                        type="number"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-black text-green-700 placeholder:text-gray-400 placeholder:font-medium"
-                        placeholder="Fee"
-                        value={newBatchItem.fee}
-                        onChange={(e) => setNewBatchItem({ ...newBatchItem, fee: e.target.value })}
-                      />
-                      <input
-                        type="text"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium text-gray-900"
-                        placeholder="Note (Opt)"
-                        value={newBatchItem.description}
-                        onChange={(e) => setNewBatchItem({ ...newBatchItem, description: e.target.value })}
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-gray-100 text-gray-800 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 mt-2 border border-gray-200"
-                    >
-                      <Plus size={16} /> Add to Queue
-                    </button>
+                    <button type="submit" className="btn-add-batch"><Plus size={16} /> Add to Queue</button>
                   </form>
 
                   {/* Batch Action Buttons */}
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      className="flex-1 py-3.5 bg-gray-900 text-white rounded-xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 hover:shadow-xl transition-all font-bold text-sm flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={handleBatchDispatch}
-                      disabled={batchItems.length === 0}
-                    >
+                  <div className="action-row">
+                    <button type="button" className="btn-dispatch" onClick={handleBatchDispatch} disabled={batchItems.length === 0}>
                       <Send size={18} /> Dispatch Batch ({batchItems.length})
                     </button>
                     {batchItems.length > 0 && (
-                      <button
-                        type="button"
-                        className="px-5 py-3.5 bg-white border border-gray-200 text-red-600 rounded-xl hover:bg-red-50 hover:border-red-200 transition-colors font-bold text-sm flex justify-center items-center shadow-sm"
-                        onClick={() => setBatchItems([])}
-                        title="Clear batch"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <button type="button" className="btn-clear" onClick={() => setBatchItems([])} title="Clear batch"><Trash2 size={18} /></button>
                     )}
                   </div>
                 </div>
@@ -704,89 +571,67 @@ export default function CEOAdminPanel() {
           )}
 
           {activeSidebarTab === 'orders' && (
-            <div className="p-5 space-y-4">
-              {orders.map(order => (
-                <div key={order.id} className="bg-white p-5 border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${
-                    order.status === 'delivered' ? 'bg-green-500' : 
-                    order.status === 'paid' ? 'bg-emerald-500' : 
-                    'bg-amber-500'
-                  }`}></div>
-                  
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="font-black text-gray-900 text-base leading-none">{order.customer_name}</h4>
-                      <div className="text-[10px] text-gray-400 font-mono mt-1.5 uppercase tracking-wider">{order.order_number}</div>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                      order.status === 'delivered' ? 'bg-green-100 text-green-700' : 
-                      order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 
-                      'bg-amber-100 text-amber-700'
-                    }`}>
-                      {order.status}
-                    </span>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2 text-gray-600 text-xs mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-2 font-medium">
-                      <div className="w-5 h-5 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
-                        <MapPin size={10} className="text-gray-400"/>
+            <div>
+              {orders.map(order => {
+                const statusClass = order.status === 'delivered' ? 'bg-status-delivered badge-delivered' 
+                                  : order.status === 'paid' ? 'bg-status-paid badge-paid' 
+                                  : 'bg-status-pending badge-pending';
+                const lineClass = order.status === 'delivered' ? 'bg-status-delivered' : order.status === 'paid' ? 'bg-status-paid' : 'bg-status-pending';
+                const badgeClass = order.status === 'delivered' ? 'badge-delivered' : order.status === 'paid' ? 'badge-paid' : 'badge-pending';
+                
+                return (
+                  <div key={order.id} className="order-card">
+                    <div className={`order-card-status-line ${lineClass}`}></div>
+                    
+                    <div className="order-header">
+                      <div>
+                        <div className="order-customer">{order.customer_name}</div>
+                        <div className="order-number">{order.order_number}</div>
                       </div>
-                      <span className="truncate">{order.pickup_address}</span>
+                      <div className={`order-badge ${badgeClass}`}>{order.status}</div>
                     </div>
-                    <div className="w-0.5 h-3 bg-gray-200 ml-2.5"></div>
-                    <div className="flex items-center gap-2 font-medium">
-                      <div className="w-5 h-5 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
-                        <ArrowRight size={10} className="text-gray-400"/>
+                    
+                    <div className="order-route">
+                      <div className="route-step"><div className="route-icon"><MapPin size={10} color="#94a3b8" /></div>{order.pickup_address}</div>
+                      <div className="route-divider"></div>
+                      <div className="route-step"><div className="route-icon"><ArrowRight size={10} color="#94a3b8" /></div>{order.dropoff_address}</div>
+                    </div>
+
+                    <div className="order-meta">
+                      <div className="meta-col">
+                        <span className="meta-label">Fee</span>
+                        <span className="meta-value-fee">KES {order.fee}</span>
                       </div>
-                      <span className="truncate">{order.dropoff_address}</span>
+                      <div className="meta-col right">
+                        <span className="meta-label">Assigned Rider</span>
+                        <span className="meta-value-rider">{riders[order.assigned_rider_id]?.name || 'Unassigned'}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Fee</span>
-                      <span className="font-black text-green-600 text-base leading-none">KES {order.fee}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Assigned Rider</span>
-                      <span className="font-bold text-blue-600 text-sm leading-none bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
-                        {riders[order.assigned_rider_id]?.name || 'Unassigned'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Phone & Quick Actions Bar */}
-                  <div className="flex items-center justify-between mt-4 bg-gray-50 p-2 rounded-xl border border-gray-100">
-                    <span className="font-mono text-gray-700 text-xs font-bold pl-2 tracking-wide">
-                      {order.customer_phone || 'No Phone'}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {order.customer_phone && (
-                        <>
-                          <a href={`tel:${order.customer_phone}`} className="p-2 rounded-lg bg-white border border-gray-200 text-blue-600 hover:bg-blue-50 transition shadow-sm" title="Call">
-                            <Phone size={14} />
-                          </a>
-                          <a href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(`Hello ${order.customer_name}, Falcon Delivery here regarding your order (${order.order_number}).`)}`} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-white border border-gray-200 text-green-600 hover:bg-green-50 transition shadow-sm" title="WhatsApp">
-                            <MessageCircle size={14} />
-                          </a>
-                        </>
-                      )}
-                      <button type="button" onClick={() => copyToClipboard(order.customer_phone || order.order_number, order.id)} className="p-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 transition shadow-sm" title="Copy">
-                        {copiedOrderId === order.id ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                      </button>
-                      {order.status !== 'delivered' && order.status !== 'paid' && (
-                        <button onClick={() => triggerMpesa(order.id)} className="p-2 px-4 rounded-lg bg-green-500 text-white font-bold text-xs hover:bg-green-600 transition shadow-sm ml-1 flex items-center gap-1" title="M-Pesa Pay">
-                          <Smartphone size={14}/> Pay
+                    {/* Phone & Quick Actions Bar */}
+                    <div className="order-actions">
+                      <span className="order-phone">{order.customer_phone || 'No Phone'}</span>
+                      <div className="actions-group">
+                        {order.customer_phone && (
+                          <>
+                            <a href={`tel:${order.customer_phone}`} className="action-btn call" title="Call"><Phone size={14} /></a>
+                            <a href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(`Hello ${order.customer_name}, Falcon Delivery here regarding your order (${order.order_number}).`)}`} target="_blank" rel="noreferrer" className="action-btn wa" title="WhatsApp"><MessageCircle size={14} /></a>
+                          </>
+                        )}
+                        <button type="button" onClick={() => copyToClipboard(order.customer_phone || order.order_number, order.id)} className="action-btn copy" title="Copy">
+                          {copiedOrderId === order.id ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
                         </button>
-                      )}
+                        {order.status !== 'delivered' && order.status !== 'paid' && (
+                          <button onClick={() => triggerMpesa(order.id)} className="action-btn-pay" title="M-Pesa Pay"><Smartphone size={14}/> Pay</button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {orders.length === 0 && (
-                <div className="text-gray-400 text-center py-16 text-sm font-medium flex flex-col items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                  <Package size={32} className="text-gray-300"/>
+                <div className="empty-state">
+                  <Package size={32} color="#cbd5e1" />
                   No active orders on the board
                 </div>
               )}
@@ -796,34 +641,30 @@ export default function CEOAdminPanel() {
       </div>
 
       {/* Map Container */}
-      <div className="flex-1 relative z-0">
+      <div className="map-area">
         {/* Map Overlay Top Left (Metrics) */}
-        <div className="absolute top-5 left-5 z-[400] flex gap-3 pointer-events-none">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 px-6 flex items-center gap-8 pointer-events-auto">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Deliveries</span>
-              <span className="text-2xl font-black text-gray-900 leading-none">{totalOrders}</span>
+        <div className="map-metrics-overlay">
+          <div className="metrics-box">
+            <div className="metric-col">
+              <span className="metric-label">Deliveries</span>
+              <span className="metric-val">{totalOrders}</span>
             </div>
-            <div className="w-px h-10 bg-gray-100"></div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Gross Revenue</span>
-              <span className="text-2xl font-black text-green-600 leading-none">KES {totalEarnings}</span>
+            <div className="metric-divider"></div>
+            <div className="metric-col">
+              <span className="metric-label">Gross Revenue</span>
+              <span className="metric-val green">KES {totalEarnings}</span>
             </div>
           </div>
         </div>
 
         {/* Map Overlay Top Right (Switch to Finance Tab) */}
-        <div className="absolute top-5 right-5 z-[400]">
-          <button 
-            className="bg-white hover:bg-gray-50 text-gray-800 px-6 py-3 rounded-2xl shadow-xl border border-gray-200 font-bold transition-all flex items-center gap-2 pointer-events-auto"
-            onClick={() => setActiveTab('transactions')}
-          >
-            <LayoutDashboard size={18} className="text-blue-600" />
-            Finance Dashboard
+        <div className="map-action-overlay">
+          <button className="btn-finance" onClick={() => setActiveTab('transactions')}>
+            <LayoutDashboard size={18} className="icon-blue" /> Finance Dashboard
           </button>
         </div>
 
-        <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
+        <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab', zIndex: 1 }}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
           <MapInteraction 
