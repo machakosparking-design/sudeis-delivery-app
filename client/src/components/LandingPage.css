@@ -169,13 +169,7 @@
 /* ----------------- Hero Section with Scenic Background & Live Falcon Animation ----------------- */
 .hero-section {
   padding: 4.5rem 1.5rem 3.5rem;
-  background-color: #F8FAFC;
-  background-image: 
-    linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(248, 250, 252, 0.70) 45%, rgba(241, 245, 249, 0.94) 100%),
-    url('../assets/falcon_hero_bg.jpg');
-  background-size: cover;
-  background-position: center bottom;
-  background-repeat: no-repeat;
+  background: url('../assets/falcon_hero_bg.jpg') center bottom / cover no-repeat;
   position: relative;
   overflow: hidden;
 }
@@ -188,19 +182,19 @@
   right: 0;
   bottom: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
   overflow: hidden;
 }
 
 /* Main Soaring Falcon */
 .falcon-flight-track.main-falcon {
   position: absolute;
-  top: 14%;
+  top: 10%;
   left: -140px;
-  width: 110px;
-  height: 72px;
-  animation: falconSoarAcross 20s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  filter: drop-shadow(0 12px 20px rgba(15, 23, 42, 0.22));
+  width: 125px;
+  height: 82px;
+  animation: falconSoarAcross 18s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  filter: drop-shadow(0 14px 22px rgba(15, 23, 42, 0.35));
 }
 
 .falcon-body-wrap {
@@ -244,24 +238,24 @@
 /* Distant Falcons Soaring High in Horizon Thermals */
 .falcon-flight-track.distant-falcon-1 {
   position: absolute;
-  top: 8%;
+  top: 6%;
   left: -70px;
-  width: 46px;
-  height: 30px;
-  opacity: 0.55;
-  animation: falconSoarHigh 28s linear 6s infinite;
-  filter: blur(0.3px);
+  width: 52px;
+  height: 34px;
+  opacity: 0.8;
+  animation: falconSoarHigh 26s linear 5s infinite;
+  filter: blur(0.2px) drop-shadow(0 4px 8px rgba(15, 23, 42, 0.2));
 }
 
 .falcon-flight-track.distant-falcon-2 {
   position: absolute;
-  top: 25%;
+  top: 22%;
   left: -60px;
-  width: 36px;
-  height: 24px;
-  opacity: 0.42;
-  animation: falconSoarHigh 24s linear 14s infinite;
-  filter: blur(0.5px);
+  width: 42px;
+  height: 28px;
+  opacity: 0.7;
+  animation: falconSoarHigh 22s linear 12s infinite;
+  filter: blur(0.3px) drop-shadow(0 4px 8px rgba(15, 23, 42, 0.2));
 }
 
 @keyframes falconSoarAcross {
@@ -409,16 +403,19 @@
   letter-spacing: -1px;
   color: var(--primary-navy);
   margin-bottom: 1.25rem;
+  text-shadow: 0 2px 16px rgba(255, 255, 255, 0.85), 0 0 2px rgba(255, 255, 255, 0.95);
 }
 .gradient-text {
-  background: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
+  background: linear-gradient(135deg, #1D4ED8 0%, #0284C7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .hero-subtitle {
   font-size: 1.15rem;
   line-height: 1.6;
-  color: var(--text-muted);
+  color: #1E293B;
+  font-weight: 500;
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.9);
   margin-bottom: 2rem;
 }
 .hero-cta-group {
@@ -447,7 +444,8 @@
   box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
 }
 .btn-hero-secondary {
-  background: white;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
   color: var(--primary-navy);
   padding: 0.85rem 1.75rem;
@@ -459,24 +457,32 @@
   align-items: center;
   gap: 0.6rem;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 .btn-hero-secondary:hover {
-  background: #F1F5F9;
+  background: #FFFFFF;
   border-color: #CBD5E1;
   transform: translateY(-2px);
 }
 .hero-trust-list {
   display: flex;
-  gap: 1.5rem;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 .trust-item {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0F172A;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 /* Hero Visual Card */
