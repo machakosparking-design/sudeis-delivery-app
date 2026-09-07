@@ -17,37 +17,42 @@ export default function App() {
   const getDomainContext = () => {
     if (typeof window === 'undefined') return { view: 'landing', systemType: null, orderNumber: null };
     const hostname = window.location.hostname.toLowerCase();
-    const pathname = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase();
+    const rawPath = window.location.pathname || '';
+    const lowerPath = rawPath.toLowerCase();
+    const rawHash = window.location.hash || '';
+    const lowerHash = rawHash.toLowerCase();
 
-    // Check for public receipt: /receipt/:orderNumber or ?receipt=... or #/receipt/...
+    // Check for public receipt query param: ?receipt=...
     const urlParams = new URLSearchParams(window.location.search);
     const queryReceipt = urlParams.get('receipt');
-    if (queryReceipt) {
-      return { view: 'receipt', systemType: null, orderNumber: queryReceipt.trim() };
+    if (queryReceipt && queryReceipt.trim()) {
+      return { view: 'receipt', systemType: null, orderNumber: decodeURIComponent(queryReceipt.trim()) };
     }
 
-    if (pathname.startsWith('/receipt/')) {
-      const orderNumber = pathname.replace('/receipt/', '').trim();
-      if (orderNumber) {
+    // Check for public receipt path: /receipt/:orderNumber (preserve original casing!)
+    if (lowerPath.startsWith('/receipt/')) {
+      const orderNumber = decodeURIComponent(rawPath.substring(9).trim());
+      if (orderNumber && orderNumber !== 'undefined' && orderNumber !== 'null') {
         return { view: 'receipt', systemType: null, orderNumber };
       }
     }
 
-    if (hash.includes('/receipt/')) {
-      const parts = hash.split('/receipt/');
-      if (parts[1]) {
-        return { view: 'receipt', systemType: null, orderNumber: parts[1].trim() };
+    // Check for hash receipt: #/receipt/:orderNumber (preserve original casing!)
+    if (lowerHash.includes('/receipt/')) {
+      const idx = lowerHash.indexOf('/receipt/');
+      const orderNumber = decodeURIComponent(rawHash.substring(idx + 9).trim());
+      if (orderNumber && orderNumber !== 'undefined' && orderNumber !== 'null') {
+        return { view: 'receipt', systemType: null, orderNumber };
       }
     }
 
     // CEO Admin - system.falcondelivery.co.ke
-    if (hostname.startsWith('system.') || pathname.startsWith('/system') || hash.includes('/system')) {
+    if (hostname.startsWith('system.') || lowerPath.startsWith('/system') || lowerHash.includes('/system')) {
       return { view: 'app', systemType: 'ceo', orderNumber: null };
     }
     
     // Rider App - app.falcondelivery.co.ke
-    if (hostname.startsWith('app.') || pathname.startsWith('/app') || hash.includes('/app')) {
+    if (hostname.startsWith('app.') || lowerPath.startsWith('/app') || lowerHash.includes('/app')) {
       return { view: 'app', systemType: 'rider', orderNumber: null };
     }
     

@@ -408,6 +408,44 @@
   width: 100%;
 }
 
+.receipt-search-form {
+  display: flex;
+  gap: 8px;
+  margin: 1.25rem 0 1.25rem 0;
+}
+
+.receipt-search-input {
+  flex: 1;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.receipt-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.receipt-search-btn {
+  padding: 0.65rem 1rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.receipt-search-btn:hover {
+  background: #1d4ed8;
+}
+
 /* ── Dedicated Print Engine Stylesheet (@media print) ──────────────────── */
 @media print {
   /* Hide page background and center the receipt card */

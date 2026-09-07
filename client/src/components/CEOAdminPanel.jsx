@@ -978,7 +978,7 @@ export default function CEOAdminPanel({ userRole }) {
                       <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                           <a
-                            href={`/receipt/${order.order_number}`}
+                            href={`/receipt/${order.order_number || order.id}`}
                             target="_blank"
                             rel="noreferrer"
                             style={{
@@ -1003,13 +1003,13 @@ export default function CEOAdminPanel({ userRole }) {
                               href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(
                                 `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
                                 `───────────────────────\n` +
-                                `📦 *Order No:* ${order.order_number}\n` +
+                                `📦 *Order No:* ${order.order_number || order.id}\n` +
                                 `👤 *Customer:* ${order.customer_name}\n` +
                                 `💰 *Amount:* KES ${order.fee}\n` +
                                 `✅ *Status:* PAID (M-Pesa: ${order.mpesa_receipt || 'Confirmed'})\n` +
                                 `───────────────────────\n` +
                                 `📄 *View / Download Official PDF Receipt:*\n` +
-                                `👉 ${window.location.origin}/receipt/${order.order_number}\n\n` +
+                                `👉 ${window.location.origin}/receipt/${order.order_number || order.id}\n\n` +
                                 `Thank you for choosing Falcon Delivery! 🚀`
                               )}`}
                               target="_blank"
@@ -1915,7 +1915,7 @@ export default function CEOAdminPanel({ userRole }) {
 
                     {/* Official Receipt Link */}
                     <a
-                      href={`/receipt/${order.order_number}`}
+                      href={`/receipt/${order.order_number || order.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="action-btn-circle"

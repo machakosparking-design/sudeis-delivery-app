@@ -41,7 +41,9 @@ BEGIN
     COALESCE(r.name, 'Falcon Courier Rider') AS rider_name
   FROM public.orders o
   LEFT JOIN public.riders r ON o.assigned_rider_id = r.id
-  WHERE o.order_number = p_order_number
+  WHERE LOWER(COALESCE(o.order_number, '')) = LOWER(p_order_number)
+     OR o.id::text = p_order_number
+     OR LOWER(COALESCE(o.mpesa_receipt, '')) = LOWER(p_order_number)
   LIMIT 1;
 END;
 $$;

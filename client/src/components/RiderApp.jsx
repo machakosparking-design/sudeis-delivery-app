@@ -680,7 +680,7 @@ export default function RiderApp({ riderCode }) {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <a
-                        href={`/receipt/${order.order_number}`}
+                        href={`/receipt/${order.order_number || order.id}`}
                         target="_blank"
                         rel="noreferrer"
                         style={{
@@ -705,13 +705,13 @@ export default function RiderApp({ riderCode }) {
                           href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(
                             `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
                             `───────────────────────\n` +
-                            `📦 *Order No:* ${order.order_number}\n` +
+                            `📦 *Order No:* ${order.order_number || order.id}\n` +
                             `👤 *Customer:* ${order.customer_name}\n` +
                             `💰 *Amount:* KES ${order.fee}\n` +
                             `✅ *Status:* DELIVERED\n` +
                             `───────────────────────\n` +
                             `📄 *View / Download Official PDF Receipt:*\n` +
-                            `👉 ${window.location.origin}/receipt/${order.order_number}\n\n` +
+                            `👉 ${window.location.origin}/receipt/${order.order_number || order.id}\n\n` +
                             `Thank you for choosing Falcon Delivery! 🚀`
                           )}`}
                           target="_blank"
@@ -876,7 +876,7 @@ export default function RiderApp({ riderCode }) {
                 href={`https://wa.me/${formatKenyanPhone(lastDeliveredOrder.customer_phone)}?text=${encodeURIComponent(
                   `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
                   `───────────────────────\n` +
-                  `📦 *Order No:* ${lastDeliveredOrder.order_number}\n` +
+                  `📦 *Order No:* ${lastDeliveredOrder.order_number || lastDeliveredOrder.id}\n` +
                   `👤 *Customer:* ${lastDeliveredOrder.customer_name}\n` +
                   `🤝 *Received by:* ${lastDeliveredOrder.recipient}\n` +
                   `💰 *Amount:* KES ${lastDeliveredOrder.fee}\n` +
@@ -884,7 +884,7 @@ export default function RiderApp({ riderCode }) {
                   `👤 *Delivered by:* ${rider.name || 'Falcon Rider'}\n` +
                   `───────────────────────\n` +
                   `📄 *View / Download Official PDF Receipt:*\n` +
-                  `👉 ${window.location.origin}/receipt/${lastDeliveredOrder.order_number}\n\n` +
+                  `👉 ${window.location.origin}/receipt/${lastDeliveredOrder.order_number || lastDeliveredOrder.id}\n\n` +
                   `Thank you for choosing Falcon Delivery! 🚀`
                 )}`}
                 target="_blank"
