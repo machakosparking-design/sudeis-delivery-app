@@ -31,10 +31,12 @@ import {
   Bike,
   KeyRound,
   Users,
-  Send
+  Send,
+  Printer
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { parseAddressAndNote } from '../utils/orderUtils';
+import { broadcastRiderLocation } from '../utils/realtimeGps';
 
 // ── Sound Synthesizer (Zero External Audio File Dependency) ─────────────────────
 const playSoundCue = (type = 'offer') => {
@@ -253,50 +255,28 @@ export default function RiderApp({ riderCode }) {
     };
   }, [rider.id, isOnline, rider.status, soundEnabled]);
 
-  // 4. HTML5 GPS Tracking via Supabase Broadcast to 'rider-gps'
+  // 4. HTML5 GPS Tracking with Pusher + Intelligent 10s Throttling
   useEffect(() => {
-    if (!rider.id) return;
-    const gpsChannel = supabase.channel('rider-gps');
+    if (!rider.id || !isOnline) return;
 
-    const startTracking = () => {
-      if ('geolocation' in navigator) {
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          (position) => {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            setCurrentCoords({ lat, lng });
+    if ('geolocation' in navigator) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setCurrentCoords({ lat, lng });
+          broadcastRiderLocation(rider.id, lat, lng);
+        },
+        (error) => console.warn('Rider GPS Warning:', error.message),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+      );
+    }
 
-            gpsChannel.send({
-              type: 'broadcast',
-              event: 'location_update',
-              payload: { riderId: rider.id, lat, lng }
-            });
-          },
-          (error) => console.warn('Rider GPS Warning:', error.message),
-          { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-        );
-      }
-    };
-
-    const stopTracking = () => {
+    return () => {
       if (watchIdRef.current !== null && 'geolocation' in navigator) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-    };
-
-    if (isOnline) {
-      gpsChannel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') startTracking();
-      });
-    } else {
-      stopTracking();
-      supabase.removeChannel(gpsChannel);
-    }
-
-    return () => {
-      stopTracking();
-      supabase.removeChannel(gpsChannel);
     };
   }, [isOnline, rider.id]);
 
@@ -682,19 +662,79 @@ export default function RiderApp({ riderCode }) {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #F1F5F9' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                      {new Date(order.updated_at || order.created_at).toLocaleDateString()}
-                    </span>
-                    {order.mpesa_receipt ? (
-                      <span style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                        M-Pesa: {order.mpesa_receipt}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #F1F5F9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                        {new Date(order.updated_at || order.created_at).toLocaleDateString()}
                       </span>
-                    ) : (
-                      <span style={{ fontSize: '0.7rem', background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                        Cash on Delivery
-                      </span>
-                    )}
+                      {order.mpesa_receipt ? (
+                        <span style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                          M-Pesa: {order.mpesa_receipt}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.7rem', background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                          Cash on Delivery
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <a
+                        href={`/receipt/${order.order_number}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          background: '#F8FAFC',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '6px',
+                          padding: '2px 7px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          color: '#334155',
+                          textDecoration: 'none'
+                        }}
+                        title="View Official PDF Receipt"
+                      >
+                        <Printer size={11} /> Receipt
+                      </a>
+                      {order.customer_phone && (
+                        <a
+                          href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(
+                            `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
+                            `───────────────────────\n` +
+                            `📦 *Order No:* ${order.order_number}\n` +
+                            `👤 *Customer:* ${order.customer_name}\n` +
+                            `💰 *Amount:* KES ${order.fee}\n` +
+                            `✅ *Status:* DELIVERED\n` +
+                            `───────────────────────\n` +
+                            `📄 *View / Download Official PDF Receipt:*\n` +
+                            `👉 ${window.location.origin}/receipt/${order.order_number}\n\n` +
+                            `Thank you for choosing Falcon Delivery! 🚀`
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            background: '#ECFDF5',
+                            border: '1px solid #A7F3D0',
+                            borderRadius: '6px',
+                            padding: '2px 7px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: '#059669',
+                            textDecoration: 'none'
+                          }}
+                          title="Share Receipt on WhatsApp"
+                        >
+                          <MessageCircle size={11} /> WhatsApp
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -834,13 +874,24 @@ export default function RiderApp({ riderCode }) {
             {lastDeliveredOrder.customer_phone && (
               <a
                 href={`https://wa.me/${formatKenyanPhone(lastDeliveredOrder.customer_phone)}?text=${encodeURIComponent(
-                  `Hello ${lastDeliveredOrder.customer_name}, your Falcon Delivery package (${lastDeliveredOrder.order_number}) has been delivered successfully by ${rider.name || 'your courier'}. (Received by: ${lastDeliveredOrder.recipient}). Thank you for choosing Falcon Delivery! 🦅`
+                  `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
+                  `───────────────────────\n` +
+                  `📦 *Order No:* ${lastDeliveredOrder.order_number}\n` +
+                  `👤 *Customer:* ${lastDeliveredOrder.customer_name}\n` +
+                  `🤝 *Received by:* ${lastDeliveredOrder.recipient}\n` +
+                  `💰 *Amount:* KES ${lastDeliveredOrder.fee}\n` +
+                  `✅ *Status:* DELIVERED\n` +
+                  `👤 *Delivered by:* ${rider.name || 'Falcon Rider'}\n` +
+                  `───────────────────────\n` +
+                  `📄 *View / Download Official PDF Receipt:*\n` +
+                  `👉 ${window.location.origin}/receipt/${lastDeliveredOrder.order_number}\n\n` +
+                  `Thank you for choosing Falcon Delivery! 🚀`
                 )}`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn-send-receipt"
               >
-                <MessageCircle size={18} /> Send Delivery Receipt on WhatsApp
+                <MessageCircle size={18} /> Send Official PDF Receipt on WhatsApp
               </a>
             )}
 

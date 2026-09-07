@@ -5,9 +5,11 @@ import {
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
   Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
-  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText, KeyRound
+  CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText, KeyRound,
+  Printer
 } from 'lucide-react';
 import { supabase } from '../supabase';
+import { subscribeToFleetGps } from '../utils/realtimeGps';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { parseAddressAndNote, formatDropoffWithNote } from '../utils/orderUtils';
 
@@ -201,21 +203,20 @@ export default function CEOAdminPanel({ userRole }) {
       })
       .subscribe();
 
-    const gpsChannel = supabase.channel('rider-gps')
-      .on('broadcast', { event: 'location_update' }, ({ payload }) => {
-        setRiders(prev => {
-          if (!prev[payload.riderId]) return prev;
-          return {
-            ...prev,
-            [payload.riderId]: { ...prev[payload.riderId], current_lat: payload.lat, current_lng: payload.lng }
-          };
-        });
-      })
-      .subscribe();
+    // Fleet GPS subscription (supports Pusher with fallback to throttled Supabase)
+    const unsubscribeGps = subscribeToFleetGps(({ riderId, lat, lng }) => {
+      setRiders(prev => {
+        if (!prev[riderId]) return prev;
+        return {
+          ...prev,
+          [riderId]: { ...prev[riderId], current_lat: lat, current_lng: lng }
+        };
+      });
+    });
 
     return () => {
       supabase.removeChannel(dbChannel);
-      supabase.removeChannel(gpsChannel);
+      unsubscribeGps();
     };
   }, [stkModalData.isOpen, stkModalData.orderId]);
 
@@ -948,6 +949,7 @@ export default function CEOAdminPanel({ userRole }) {
                     <th style={{ padding: '0.75rem 0.5rem' }}>Phone</th>
                     <th style={{ padding: '0.75rem 0.5rem' }}>Amount</th>
                     <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -972,6 +974,65 @@ export default function CEOAdminPanel({ userRole }) {
                         <span className="badge-paid">
                           <CheckCircle size={12} /> PAID
                         </span>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <a
+                            href={`/receipt/${order.order_number}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #CBD5E1',
+                              background: '#FFFFFF',
+                              color: '#334155',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="View / Print PDF Receipt"
+                          >
+                            <Printer size={12} /> PDF
+                          </a>
+                          {order.customer_phone && (
+                            <a
+                              href={`https://wa.me/${formatKenyanPhone(order.customer_phone)}?text=${encodeURIComponent(
+                                `*FALCON DELIVERY - OFFICIAL RECEIPT* 🧾\n` +
+                                `───────────────────────\n` +
+                                `📦 *Order No:* ${order.order_number}\n` +
+                                `👤 *Customer:* ${order.customer_name}\n` +
+                                `💰 *Amount:* KES ${order.fee}\n` +
+                                `✅ *Status:* PAID (M-Pesa: ${order.mpesa_receipt || 'Confirmed'})\n` +
+                                `───────────────────────\n` +
+                                `📄 *View / Download Official PDF Receipt:*\n` +
+                                `👉 ${window.location.origin}/receipt/${order.order_number}\n\n` +
+                                `Thank you for choosing Falcon Delivery! 🚀`
+                              )}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #A7F3D0',
+                                background: '#ECFDF5',
+                                color: '#059669',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Send Receipt via WhatsApp"
+                            >
+                              <MessageCircle size={12} /> WhatsApp
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1851,6 +1912,18 @@ export default function CEOAdminPanel({ userRole }) {
                     >
                       {copiedOrderId === order.id ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
                     </button>
+
+                    {/* Official Receipt Link */}
+                    <a
+                      href={`/receipt/${order.order_number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="action-btn-circle"
+                      style={{ background: '#F1F5F9', color: '#334155', textDecoration: 'none' }}
+                      title="View Official PDF Receipt"
+                    >
+                      <Printer size={13} />
+                    </a>
                     
                     {/* Trigger STK Push modal or show Paid state */}
                     {!isPaid ? (

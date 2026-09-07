@@ -1,0 +1,463 @@
+/* ==========================================================================
+   Customer Digital Receipt Styling & High-Resolution Print Engine
+   ========================================================================== */
+
+.receipt-page-container {
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 4rem 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b;
+}
+
+/* ── Top Bar Controls (Hidden in Print) ─────────────────────────────────── */
+.receipt-top-bar {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.receipt-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.receipt-back-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.receipt-action-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.receipt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.receipt-btn-whatsapp {
+  background-color: #25d366;
+  color: white;
+}
+
+.receipt-btn-whatsapp:hover {
+  background-color: #20ba5a;
+}
+
+.receipt-btn-print {
+  background-color: #0f172a;
+  color: white;
+}
+
+.receipt-btn-print:hover {
+  background-color: #1e293b;
+}
+
+/* ── Main Receipt Card ─────────────────────────────────────────────────── */
+.receipt-card {
+  width: 100%;
+  max-width: 600px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Top decorative header band */
+.receipt-header-band {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: white;
+  padding: 1.75rem 2rem 1.5rem 2rem;
+  position: relative;
+}
+
+.receipt-brand-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.receipt-brand-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.receipt-logo-icon {
+  background: #2563eb;
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.receipt-company-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.receipt-company-tagline {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.receipt-voucher-title {
+  text-align: right;
+}
+
+.receipt-title-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 0.25rem;
+}
+
+.receipt-order-num {
+  font-size: 0.95rem;
+  font-family: monospace;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+/* ── Status Banner ──────────────────────────────────────────────────────── */
+.receipt-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  border-bottom: 1px dashed #cbd5e1;
+  background-color: #f8fafc;
+}
+
+.receipt-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-badge-paid {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge-delivered {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.status-badge-pending {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.receipt-timestamp {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ── Receipt Body ──────────────────────────────────────────────────────── */
+.receipt-body {
+  padding: 1.75rem 2rem;
+}
+
+.receipt-section-title {
+  font-size: 0.725rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 0.75rem;
+}
+
+/* Route timeline */
+.receipt-route-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.route-stop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.route-stop:first-child {
+  padding-bottom: 1rem;
+}
+
+.route-stop:first-child::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: 0;
+  width: 2px;
+  background: #cbd5e1;
+}
+
+.route-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.route-dot-pickup {
+  background: #2563eb;
+  color: white;
+}
+
+.route-dot-dropoff {
+  background: #10b981;
+  color: white;
+}
+
+.route-details {
+  flex: 1;
+}
+
+.route-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.route-address {
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Customer & Carrier Grid */
+.receipt-info-grid {
+  display: grid;
+  grid-template-cols: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-item-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 0.2rem;
+}
+
+.info-item-value {
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* Financial Table */
+.receipt-financials {
+  margin-bottom: 1.5rem;
+}
+
+.fin-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.fin-row-total {
+  border-top: 2px solid #0f172a;
+  border-bottom: 2px solid #0f172a;
+  padding: 0.85rem 0;
+  margin-top: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.fin-amount-highlight {
+  color: #15803d;
+  font-weight: 800;
+}
+
+/* M-Pesa Stamp Box */
+.mpesa-confirmation-box {
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.mpesa-code-label {
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #166534;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mpesa-code-value {
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #14532d;
+  letter-spacing: 0.05em;
+}
+
+/* Footer & Verification */
+.receipt-footer {
+  text-align: center;
+  padding: 1.5rem 2rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.775rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.receipt-footer-support {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.4rem;
+}
+
+.receipt-footer-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+/* ── Loading and Error States ──────────────────────────────────────────── */
+.receipt-state-box {
+  background: white;
+  padding: 3rem 2rem;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  max-width: 480px;
+  width: 100%;
+}
+
+/* ── Dedicated Print Engine Stylesheet (@media print) ──────────────────── */
+@media print {
+  /* Hide page background and center the receipt card */
+  body, html {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .receipt-page-container {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Completely hide all interactive UI and screen buttons */
+  .no-print,
+  .receipt-top-bar,
+  .landing-nav,
+  .top-banner,
+  header,
+  footer {
+    display: none !important;
+  }
+
+  .receipt-card {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    page-break-inside: avoid;
+  }
+
+  .receipt-header-band {
+    background: #0f172a !important;
+    color: white !important;
+  }
+
+  .status-badge-paid {
+    border: 1px solid #15803d !important;
+    background: #dcfce7 !important;
+    color: #15803d !important;
+  }
+
+  .mpesa-confirmation-box {
+    border: 1px solid #166534 !important;
+    background: #f0fdf4 !important;
+  }
+}

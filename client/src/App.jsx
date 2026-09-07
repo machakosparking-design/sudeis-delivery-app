@@ -4,6 +4,7 @@ import AuthLogin from './components/AuthLogin';
 import UnauthorizedScreen from './components/UnauthorizedScreen';
 import './index.css';
 import FalconIcon from './components/FalconIcon';
+import CustomerReceipt from './components/CustomerReceipt';
 import { ArrowLeft, Loader2, LogOut } from 'lucide-react';
 import { supabase } from './supabase';
 
@@ -14,26 +15,48 @@ const RiderApp = lazy(() => import('./components/RiderApp'));
 export default function App() {
   // Determine the context based on subdomain or path
   const getDomainContext = () => {
-    if (typeof window === 'undefined') return { view: 'landing', systemType: null };
+    if (typeof window === 'undefined') return { view: 'landing', systemType: null, orderNumber: null };
     const hostname = window.location.hostname.toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
 
+    // Check for public receipt: /receipt/:orderNumber or ?receipt=... or #/receipt/...
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryReceipt = urlParams.get('receipt');
+    if (queryReceipt) {
+      return { view: 'receipt', systemType: null, orderNumber: queryReceipt.trim() };
+    }
+
+    if (pathname.startsWith('/receipt/')) {
+      const orderNumber = pathname.replace('/receipt/', '').trim();
+      if (orderNumber) {
+        return { view: 'receipt', systemType: null, orderNumber };
+      }
+    }
+
+    if (hash.includes('/receipt/')) {
+      const parts = hash.split('/receipt/');
+      if (parts[1]) {
+        return { view: 'receipt', systemType: null, orderNumber: parts[1].trim() };
+      }
+    }
+
     // CEO Admin - system.falcondelivery.co.ke
     if (hostname.startsWith('system.') || pathname.startsWith('/system') || hash.includes('/system')) {
-      return { view: 'app', systemType: 'ceo' };
+      return { view: 'app', systemType: 'ceo', orderNumber: null };
     }
     
     // Rider App - app.falcondelivery.co.ke
     if (hostname.startsWith('app.') || pathname.startsWith('/app') || hash.includes('/app')) {
-      return { view: 'app', systemType: 'rider' };
+      return { view: 'app', systemType: 'rider', orderNumber: null };
     }
     
-    return { view: 'landing', systemType: null };
+    return { view: 'landing', systemType: null, orderNumber: null };
   };
 
   const initContext = getDomainContext();
   const [currentView, setCurrentView] = useState(initContext.view);
+  const [receiptOrderNumber, setReceiptOrderNumber] = useState(initContext.orderNumber);
   const [systemType, setSystemType] = useState(initContext.systemType);
   const [currentRole, setCurrentRole] = useState(initContext.systemType === 'ceo' ? 'ceo' : 'rider_1');
   const [session, setSession] = useState(null);
@@ -101,6 +124,9 @@ export default function App() {
       const ctx = getDomainContext();
       setCurrentView(ctx.view);
       setSystemType(ctx.systemType);
+      if (ctx.orderNumber) {
+        setReceiptOrderNumber(ctx.orderNumber);
+      }
       
       // Update role automatically if switching contexts via history
       if (ctx.systemType === 'ceo') {
@@ -168,6 +194,16 @@ export default function App() {
   // If on landing page view, render the LandingPage component
   if (currentView === 'landing') {
     return <LandingPage onGoToApp={handleGoToApp} />;
+  }
+
+  // If viewing a customer receipt, render CustomerReceipt without requiring auth
+  if (currentView === 'receipt') {
+    return (
+      <CustomerReceipt 
+        orderNumber={receiptOrderNumber} 
+        onBack={handleBackToWebsite} 
+      />
+    );
   }
 
   // Delivery System View - Requires Auth
