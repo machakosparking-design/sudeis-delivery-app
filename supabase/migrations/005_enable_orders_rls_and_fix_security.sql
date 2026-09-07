@@ -148,6 +148,10 @@ CREATE TRIGGER trg_protect_rider_role
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
+-- Revoke direct table access from anonymous users (Forces receipt access through get_public_receipt RPC)
+REVOKE ALL ON public.orders FROM anon;
+GRANT ALL ON public.orders TO authenticated;
+
 DROP POLICY IF EXISTS orders_ceo_superadmin_policy ON public.orders;
 DROP POLICY IF EXISTS orders_rider_select_policy ON public.orders;
 DROP POLICY IF EXISTS orders_rider_update_policy ON public.orders;
@@ -264,22 +268,22 @@ AS $$
 BEGIN
   RETURN QUERY
   SELECT 
-    o.order_number,
-    o.customer_name,
-    o.customer_phone,
-    o.pickup_address,
-    o.dropoff_address,
-    o.fee,
-    o.status,
-    o.mpesa_receipt,
+    o.order_number::text,
+    o.customer_name::text,
+    o.customer_phone::text,
+    o.pickup_address::text,
+    o.dropoff_address::text,
+    o.fee::numeric,
+    o.status::text,
+    o.mpesa_receipt::text,
     o.created_at,
     o.updated_at,
-    COALESCE(r.name, 'Falcon Courier Rider') AS rider_name
+    COALESCE(r.name, 'Falcon Courier Rider')::text AS rider_name
   FROM public.orders o
   LEFT JOIN public.riders r ON o.assigned_rider_id = r.id
-  WHERE LOWER(COALESCE(o.order_number, '')) = LOWER(p_order_number)
+  WHERE LOWER(COALESCE(o.order_number::text, '')) = LOWER(p_order_number)
      OR o.id::text = p_order_number
-     OR LOWER(COALESCE(o.mpesa_receipt, '')) = LOWER(p_order_number)
+     OR LOWER(COALESCE(o.mpesa_receipt::text, '')) = LOWER(p_order_number)
   LIMIT 1;
 END;
 $$;
