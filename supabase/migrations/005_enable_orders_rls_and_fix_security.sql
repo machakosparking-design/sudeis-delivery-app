@@ -1,57 +1,111 @@
 -- =============================================================================
--- Migration 005: Security Hardening - Orders RLS, Anti-Escalation & Claim Verification
+-- Migration 005: Complete Security Hardening & Idempotent Schema Setup
 -- Run this in your Supabase Dashboard: SQL Editor → New query → Run
+-- Direct Link for your project:
+-- https://supabase.com/dashboard/project/vwuecbinjmhljyuysvnc/sql/new
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. Enable Row Level Security on the orders table
+-- 1. Ensure riders and orders tables exist (Creates if missing)
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS public.riders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rider_code TEXT UNIQUE,
+  name TEXT,
+  status TEXT DEFAULT 'offline',
+  orders_completed INTEGER DEFAULT 0,
+  earnings NUMERIC DEFAULT 0,
+  current_lat DOUBLE PRECISION,
+  current_lng DOUBLE PRECISION,
+  auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  role TEXT NOT NULL DEFAULT 'rider',
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Drop existing orders policies if any
-DROP POLICY IF EXISTS orders_ceo_superadmin_policy ON public.orders;
-DROP POLICY IF EXISTS orders_rider_select_policy ON public.orders;
-DROP POLICY IF EXISTS orders_rider_update_policy ON public.orders;
+CREATE TABLE IF NOT EXISTS public.orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_number TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  pickup_address TEXT,
+  pickup_lat DOUBLE PRECISION,
+  pickup_lng DOUBLE PRECISION,
+  dropoff_address TEXT,
+  dropoff_lat DOUBLE PRECISION,
+  dropoff_lng DOUBLE PRECISION,
+  fee NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'pending',
+  assigned_rider_id UUID REFERENCES public.riders(id) ON DELETE SET NULL,
+  mpesa_receipt TEXT,
+  mpesa_checkout_id TEXT,
+  delivery_pin TEXT,
+  received_by TEXT,
+  arrived_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Policy A: CEO & Superadmin have full management access (SELECT, INSERT, UPDATE, DELETE)
-CREATE POLICY orders_ceo_superadmin_policy ON public.orders
-  FOR ALL TO authenticated
-  USING (public.is_ceo())
-  WITH CHECK (public.is_ceo());
+-- Ensure all required columns exist even if tables were previously created partially
+ALTER TABLE public.riders
+  ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'rider';
 
--- Policy B: Riders can SELECT only orders assigned to them, or unassigned pending/paid offers
-CREATE POLICY orders_rider_select_policy ON public.orders
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS order_number TEXT,
+  ADD COLUMN IF NOT EXISTS mpesa_checkout_id TEXT,
+  ADD COLUMN IF NOT EXISTS mpesa_receipt TEXT,
+  ADD COLUMN IF NOT EXISTS delivery_pin TEXT,
+  ADD COLUMN IF NOT EXISTS received_by TEXT,
+  ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ;
+
+-- Constraints and Indexes
+ALTER TABLE public.riders DROP CONSTRAINT IF EXISTS riders_role_check;
+ALTER TABLE public.riders ADD CONSTRAINT riders_role_check CHECK (role IN ('ceo', 'rider', 'superadmin'));
+
+CREATE INDEX IF NOT EXISTS idx_riders_auth_user_id ON public.riders(auth_user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_mpesa_checkout_id ON public.orders(mpesa_checkout_id);
+CREATE INDEX IF NOT EXISTS idx_orders_order_number ON public.orders(order_number);
+CREATE INDEX IF NOT EXISTS idx_orders_delivery_pin ON public.orders(delivery_pin);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2. Role Check Helper Functions (SECURITY DEFINER)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.is_ceo()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.riders
+    WHERE auth_user_id = auth.uid() AND role IN ('ceo', 'superadmin')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_superadmin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.riders
+    WHERE auth_user_id = auth.uid() AND role = 'superadmin'
+  );
+$$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. Row Level Security on riders Table (Anti-Privilege Escalation)
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.riders ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS riders_select_policy ON public.riders;
+CREATE POLICY riders_select_policy ON public.riders
   FOR SELECT TO authenticated
-  USING (
-    assigned_rider_id IN (
-      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
-    )
-    OR (
-      assigned_rider_id IS NULL AND status IN ('pending', 'paid')
-    )
-  );
+  USING (true);
 
--- Policy C: Riders can UPDATE orders assigned to them, or claim an unassigned pending/paid order
-CREATE POLICY orders_rider_update_policy ON public.orders
-  FOR UPDATE TO authenticated
-  USING (
-    assigned_rider_id IN (
-      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
-    )
-    OR (
-      assigned_rider_id IS NULL AND status IN ('pending', 'paid')
-    )
-  )
-  WITH CHECK (
-    assigned_rider_id IN (
-      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
-    )
-  );
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 2. Prevent Privilege Escalation on the riders table
--- ─────────────────────────────────────────────────────────────────────────────
--- Re-create riders_update_policy with WITH CHECK to disallow role changes
 DROP POLICY IF EXISTS riders_update_policy ON public.riders;
 CREATE POLICY riders_update_policy ON public.riders
   FOR UPDATE TO authenticated
@@ -66,7 +120,7 @@ CREATE POLICY riders_update_policy ON public.riders
     )
   );
 
--- PostgreSQL trigger for defense-in-depth: Rejects role or auth_user_id tampering
+-- PostgreSQL trigger to strictly disallow non-CEO users from escalating role or changing auth_user_id
 CREATE OR REPLACE FUNCTION public.check_rider_role_update()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -90,7 +144,51 @@ CREATE TRIGGER trg_protect_rider_role
   EXECUTE FUNCTION public.check_rider_role_update();
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. Harden claim_next_order RPC against rider impersonation
+-- 4. Row Level Security on orders Table
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS orders_ceo_superadmin_policy ON public.orders;
+DROP POLICY IF EXISTS orders_rider_select_policy ON public.orders;
+DROP POLICY IF EXISTS orders_rider_update_policy ON public.orders;
+
+-- CEO & SuperAdmin have complete access
+CREATE POLICY orders_ceo_superadmin_policy ON public.orders
+  FOR ALL TO authenticated
+  USING (public.is_ceo())
+  WITH CHECK (public.is_ceo());
+
+-- Riders can only read their assigned orders, or unassigned pending/paid orders
+CREATE POLICY orders_rider_select_policy ON public.orders
+  FOR SELECT TO authenticated
+  USING (
+    assigned_rider_id IN (
+      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
+    )
+    OR (
+      assigned_rider_id IS NULL AND status IN ('pending', 'paid')
+    )
+  );
+
+-- Riders can only update their assigned orders, or claim an unassigned pending/paid order
+CREATE POLICY orders_rider_update_policy ON public.orders
+  FOR UPDATE TO authenticated
+  USING (
+    assigned_rider_id IN (
+      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
+    )
+    OR (
+      assigned_rider_id IS NULL AND status IN ('pending', 'paid')
+    )
+  )
+  WITH CHECK (
+    assigned_rider_id IN (
+      SELECT id FROM public.riders WHERE auth_user_id = auth.uid()
+    )
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. Atomic Order Claim RPC with Ownership Check
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.claim_next_order(p_rider_id UUID)
 RETURNS SETOF public.orders
@@ -101,7 +199,7 @@ AS $$
 DECLARE
   v_order public.orders;
 BEGIN
-  -- Ensure caller owns this rider account unless caller is CEO/Superadmin
+  -- Verify caller owns this rider account unless caller is CEO/Superadmin
   IF NOT public.is_ceo() THEN
     IF NOT EXISTS (
       SELECT 1 FROM public.riders
@@ -111,7 +209,6 @@ BEGIN
     END IF;
   END IF;
 
-  -- Lock the oldest pending/paid unassigned order atomically
   SELECT o.* INTO v_order
   FROM public.orders o
   WHERE (o.status = 'pending' OR o.status = 'paid')
@@ -141,3 +238,50 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.claim_next_order(UUID) TO authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6. Secure Public Receipt Lookup (Exposes only sanitized customer receipt data)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.get_public_receipt(p_order_number TEXT)
+RETURNS TABLE (
+  order_number TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  pickup_address TEXT,
+  dropoff_address TEXT,
+  fee NUMERIC,
+  status TEXT,
+  mpesa_receipt TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  rider_name TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    o.order_number,
+    o.customer_name,
+    o.customer_phone,
+    o.pickup_address,
+    o.dropoff_address,
+    o.fee,
+    o.status,
+    o.mpesa_receipt,
+    o.created_at,
+    o.updated_at,
+    COALESCE(r.name, 'Falcon Courier Rider') AS rider_name
+  FROM public.orders o
+  LEFT JOIN public.riders r ON o.assigned_rider_id = r.id
+  WHERE LOWER(COALESCE(o.order_number, '')) = LOWER(p_order_number)
+     OR o.id::text = p_order_number
+     OR LOWER(COALESCE(o.mpesa_receipt, '')) = LOWER(p_order_number)
+  LIMIT 1;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_public_receipt(TEXT) TO anon, authenticated;
