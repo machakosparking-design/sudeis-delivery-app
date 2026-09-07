@@ -259,26 +259,32 @@ export default function LandingPage({ onGoToApp }) {
                 <path d="M72,76 C75,88 68,93 42,93 L16,93" stroke="#94A3B8" strokeWidth="3" fill="none" strokeLinecap="round"/>
                 <rect x="22" y="91" width="16" height="4" rx="2" fill="#E2E8F0"/>
 
-                {/* Rear Wheel Assembly (with animated rotating spokes) */}
-                <g className="boda-spinning-wheel" style={{ transformOrigin: '34px 88px' }}>
-                  <circle cx="34" cy="88" r="16" fill="#0F172A" stroke="#334155" strokeWidth="3"/>
-                  <circle cx="34" cy="88" r="11" fill="#1E293B" stroke="#94A3B8" strokeWidth="1.5"/>
-                  <circle cx="34" cy="88" r="4" fill="#64748B"/>
-                  <line x1="34" y1="77" x2="34" y2="99" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="23" y1="88" x2="45" y2="88" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="26" y1="80" x2="42" y2="96" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="42" y1="80" x2="26" y2="96" stroke="#CBD5E1" strokeWidth="1"/>
+                {/* Rear Wheel Assembly (Solidly mounted to frame, spinning spokes) */}
+                <g transform="translate(34, 88)">
+                  <circle cx="0" cy="0" r="16" fill="#0F172A" stroke="#334155" strokeWidth="3"/>
+                  <circle cx="0" cy="0" r="11" fill="#1E293B" stroke="#94A3B8" strokeWidth="1.5"/>
+                  <circle cx="0" cy="0" r="4" fill="#64748B"/>
+                  <g>
+                    <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.22s" repeatCount="indefinite" />
+                    <line x1="0" y1="-11" x2="0" y2="11" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="-11" y1="0" x2="11" y2="0" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="-8" y1="-8" x2="8" y2="8" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="8" y1="-8" x2="-8" y2="8" stroke="#CBD5E1" strokeWidth="1.2"/>
+                  </g>
                 </g>
 
-                {/* Front Wheel Assembly (with animated rotating spokes) */}
-                <g className="boda-spinning-wheel" style={{ transformOrigin: '138px 88px' }}>
-                  <circle cx="138" cy="88" r="16" fill="#0F172A" stroke="#334155" strokeWidth="3"/>
-                  <circle cx="138" cy="88" r="11" fill="#1E293B" stroke="#94A3B8" strokeWidth="1.5"/>
-                  <circle cx="138" cy="88" r="4" fill="#64748B"/>
-                  <line x1="138" y1="77" x2="138" y2="99" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="127" y1="88" x2="149" y2="88" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="130" y1="80" x2="146" y2="96" stroke="#CBD5E1" strokeWidth="1"/>
-                  <line x1="146" y1="80" x2="130" y2="96" stroke="#CBD5E1" strokeWidth="1"/>
+                {/* Front Wheel Assembly (Solidly mounted to fork, spinning spokes) */}
+                <g transform="translate(138, 88)">
+                  <circle cx="0" cy="0" r="16" fill="#0F172A" stroke="#334155" strokeWidth="3"/>
+                  <circle cx="0" cy="0" r="11" fill="#1E293B" stroke="#94A3B8" strokeWidth="1.5"/>
+                  <circle cx="0" cy="0" r="4" fill="#64748B"/>
+                  <g>
+                    <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.22s" repeatCount="indefinite" />
+                    <line x1="0" y1="-11" x2="0" y2="11" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="-11" y1="0" x2="11" y2="0" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="-8" y1="-8" x2="8" y2="8" stroke="#CBD5E1" strokeWidth="1.2"/>
+                    <line x1="8" y1="-8" x2="-8" y2="8" stroke="#CBD5E1" strokeWidth="1.2"/>
+                  </g>
                 </g>
 
                 {/* Engine Block & Transmission */}
@@ -600,7 +606,7 @@ export default function LandingPage({ onGoToApp }) {
             <h4>Operations</h4>
             <button className="footer-link-btn" onClick={() => onGoToApp('ceo')}>CEO Admin Panel</button>
             <button className="footer-link-btn" onClick={() => onGoToApp('rider')}>Rider Dispatch Portal</button>
-            <a href="https://wa.me/254700000000" target="_blank" rel="noopener noreferrer">WhatsApp Support</a>
+            <a href="https://wa.me/254719664975" target="_blank" rel="noopener noreferrer">WhatsApp Support</a>
           </div>
         </div>
 
