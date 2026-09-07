@@ -271,8 +271,22 @@ export default function App() {
             <ArrowLeft size={16} /> Website
           </button>
 
-          <div className="flex items-center gap-2 text-xl font-bold" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FalconIcon size={22} /> Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}
+          <div className="flex items-center gap-2 text-xl font-bold" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div style={{
+              width: '34px',
+              height: '34px',
+              background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+              borderRadius: '9px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+              color: '#ffffff',
+              flexShrink: 0
+            }}>
+              <FalconIcon size={20} color="#ffffff" />
+            </div>
+            <span>Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}</span>
           </div>
         </div>
 

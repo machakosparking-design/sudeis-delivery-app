@@ -48,8 +48,19 @@ export default function AuthLogin({ systemType, onAuthSuccess }) {
         maxWidth: '400px'
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
-          <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '50%', marginBottom: '1rem' }}>
-            <FalconIcon size={32} color="#d97706" />
+          <div style={{ 
+            background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)', 
+            width: '60px',
+            height: '60px',
+            borderRadius: '16px', 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '1.25rem',
+            boxShadow: '0 8px 20px rgba(37, 99, 235, 0.35)',
+            color: '#ffffff'
+          }}>
+            <FalconIcon size={32} color="#ffffff" />
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>
             {systemType === 'ceo' ? 'CEO Admin Login' : 'Rider Dispatch Login'}
