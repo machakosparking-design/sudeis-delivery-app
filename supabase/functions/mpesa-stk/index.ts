@@ -20,10 +20,14 @@ if (!DARAJA_CONSUMER_KEY || !DARAJA_CONSUMER_SECRET || !DARAJA_SHORTCODE || !DAR
 // ── Supabase client (service role — needed to write back CheckoutRequestID) ────
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const MPESA_WEBHOOK_SECRET = Deno.env.get('MPESA_WEBHOOK_SECRET') || '';
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Safaricom callback URL
-const CALLBACK_URL = 'https://vwuecbinjmhljyuysvnc.supabase.co/functions/v1/mpesa-callback';
+// Safaricom callback URL (includes secret token query parameter if configured)
+const BASE_CALLBACK_URL = 'https://vwuecbinjmhljyuysvnc.supabase.co/functions/v1/mpesa-callback';
+const CALLBACK_URL = MPESA_WEBHOOK_SECRET
+  ? `${BASE_CALLBACK_URL}?token=${encodeURIComponent(MPESA_WEBHOOK_SECRET)}`
+  : BASE_CALLBACK_URL;
 
 // ── CORS Headers ─────────────────────────────────────────────────────────────
 const corsHeaders = {
@@ -94,6 +98,32 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // ── Authentication Check ──────────────────────────────────────────────────
+  // Require a valid Supabase Auth JWT in the Authorization header
+  const authHeader = req.headers.get('Authorization') || '';
+  const jwt = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!jwt) {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: 'Unauthorized: Missing authentication token.' 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401,
+    });
+  }
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: 'Unauthorized: Invalid or expired authentication token.' 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401,
+    });
   }
 
   try {

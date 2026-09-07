@@ -117,7 +117,7 @@ const formatKenyanPhone = (phone) => {
   return cleaned;
 };
 
-export default function RiderApp({ riderCode }) {
+export default function RiderApp({ riderCode, session, userRole, riderProfile }) {
   const [rider, setRider] = useState({ status: 'offline', orders_completed: 0, earnings: 0 });
   const [activeOrder, setActiveOrder] = useState(null);
   const [isAssignedToMe, setIsAssignedToMe] = useState(false);
@@ -157,11 +157,27 @@ export default function RiderApp({ riderCode }) {
 
   // 1. Fetch Initial Rider Profile & Historical Orders
   const fetchRiderData = async () => {
-    const { data: riderData } = await supabase
-      .from('riders')
-      .select('*')
-      .eq('rider_code', riderCode)
-      .maybeSingle();
+    let riderData = null;
+
+    // If regular rider with an active session, strictly lock to their authenticated account
+    if (userRole === 'rider' && session?.user?.id) {
+      const { data } = await supabase
+        .from('riders')
+        .select('*')
+        .eq('auth_user_id', session.user.id)
+        .maybeSingle();
+      riderData = data;
+    }
+
+    // If CEO / SuperAdmin or fallback, query by riderCode
+    if (!riderData && riderCode) {
+      const { data } = await supabase
+        .from('riders')
+        .select('*')
+        .eq('rider_code', riderCode)
+        .maybeSingle();
+      riderData = data;
+    }
 
     if (riderData) {
       setRider(riderData);
@@ -178,7 +194,7 @@ export default function RiderApp({ riderCode }) {
 
   useEffect(() => {
     fetchRiderData();
-  }, [riderCode]);
+  }, [riderCode, session?.user?.id, userRole]);
 
   // 2. Fetch Active Order (Either Assigned In-Progress OR Unassigned Pending Offer)
   const fetchActiveOrder = async () => {

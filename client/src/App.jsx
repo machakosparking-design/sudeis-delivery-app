@@ -65,8 +65,9 @@ export default function App() {
   const [systemType, setSystemType] = useState(initContext.systemType);
   const [currentRole, setCurrentRole] = useState(initContext.systemType === 'ceo' ? 'ceo' : 'rider_1');
   const [session, setSession] = useState(null);
-  // userRole is the role stored in the DB for the logged-in user ('ceo' or 'rider')
+  // userRole is the role stored in the DB for the logged-in user ('ceo', 'superadmin', or 'rider')
   const [userRole, setUserRole] = useState(null);
+  const [userRiderProfile, setUserRiderProfile] = useState(null);
   const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
@@ -79,16 +80,20 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       // Reset role on sign out
-      if (!session) setUserRole(null);
+      if (!session) {
+        setUserRole(null);
+        setUserRiderProfile(null);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch the user's role from metadata or the riders table once logged in
+  // Fetch the user's role and rider profile from the riders table once logged in
   useEffect(() => {
     if (!session?.user?.id) {
       setUserRole(null);
+      setUserRiderProfile(null);
       return;
     }
     const fetchUserRole = async () => {
@@ -105,17 +110,27 @@ export default function App() {
       // 2. Query riders table by auth_user_id (no single() to prevent PGRST116 if multiple rows match)
       const { data, error } = await supabase
         .from('riders')
-        .select('role')
+        .select('id, name, role, rider_code')
         .eq('auth_user_id', session.user.id);
 
       if (error || !data || data.length === 0) {
         console.warn('No rider profile found for user:', session.user.id, error);
         setUserRole('unknown');
+        setUserRiderProfile(null);
       } else {
         // Priority: superadmin > ceo > rider
-        const isSuperAdmin = data.some(r => r.role === 'superadmin');
-        const isCeo = data.some(r => r.role === 'ceo');
-        setUserRole(isSuperAdmin ? 'superadmin' : isCeo ? 'ceo' : (data[0].role || 'rider'));
+        const superAdminRow = data.find(r => r.role === 'superadmin');
+        const ceoRow = data.find(r => r.role === 'ceo');
+        const activeProfile = superAdminRow || ceoRow || data[0];
+        const effectiveRole = superAdminRow ? 'superadmin' : ceoRow ? 'ceo' : (activeProfile.role || 'rider');
+
+        setUserRole(effectiveRole);
+        setUserRiderProfile(activeProfile);
+
+        // If regular rider, strictly bind their currentRole to their assigned rider_code
+        if (effectiveRole === 'rider' && activeProfile.rider_code) {
+          setCurrentRole(activeProfile.rider_code);
+        }
       }
       setRoleLoading(false);
     };
@@ -273,8 +288,8 @@ export default function App() {
             </button>
           )}
           
-          {/* Rider tabs — shown when on rider context, or always for superadmin */}
-          {((!systemType || systemType === 'rider') || userRole === 'superadmin') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
+          {/* Multi-Rider tabs — ONLY shown to CEO or SuperAdmin for fleet management / monitoring */}
+          {(userRole === 'ceo' || userRole === 'superadmin') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
             <button 
               key={riderId}
               className={`btn ${currentRole === riderId ? 'btn-outline' : ''}`}
@@ -284,6 +299,24 @@ export default function App() {
               {riderId === 'rider_1' ? 'Rider 1' : riderId === 'rider_2' ? 'Rider 2' : 'Rider 3'}
             </button>
           ))}
+
+          {/* Regular riders only see their own active courier badge */}
+          {userRole === 'rider' && userRiderProfile && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.35rem 0.85rem',
+              borderRadius: '20px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              color: '#93C5FD',
+              border: '1px solid rgba(59, 130, 246, 0.3)'
+            }}>
+              <span>🏍️ {userRiderProfile.name || 'Courier Rider'}</span>
+            </div>
+          )}
 
           {/* Super Admin badge */}
           {userRole === 'superadmin' && (
@@ -326,7 +359,12 @@ export default function App() {
         {currentRole === 'ceo' && (userRole === 'ceo' || userRole === 'superadmin') ? (
           <CEOAdminPanel userRole={userRole} />
         ) : (
-          <RiderApp riderCode={currentRole} />
+          <RiderApp 
+            riderCode={currentRole} 
+            session={session} 
+            userRole={userRole} 
+            riderProfile={userRiderProfile} 
+          />
         )}
       </Suspense>
     </div>
