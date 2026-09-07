@@ -382,6 +382,149 @@
   50% { opacity: 0.7; transform: scaleX(1.2); }
 }
 
+/* ----------------- Live Animated Boda Boda Road Courier Backdrop ----------------- */
+.hero-road-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* Bodaboda Motorcycle Courier Track traversing the scenic highway */
+.bodaboda-flight-track {
+  position: absolute;
+  width: 145px;
+  height: 92px;
+  animation: bodabodaRoadRide 14s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+  filter: drop-shadow(0 12px 20px rgba(15, 23, 42, 0.45));
+}
+
+.bodaboda-body-wrap {
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  animation: bodaEngineRumble 0.16s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+
+.bodaboda-live-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Spoke and wheel rotation */
+.boda-spinning-wheel {
+  transform-box: fill-box;
+  transform-origin: center center;
+  animation: bodaWheelSpin 0.28s linear infinite;
+}
+
+@keyframes bodaWheelSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Engine and road vibration */
+@keyframes bodaEngineRumble {
+  0% { transform: scaleX(-1) translateY(0) rotate(0deg); }
+  100% { transform: scaleX(-1) translateY(-1.4px) rotate(-0.3deg); }
+}
+
+/* Glowing headlight beam projection */
+.boda-headlight-cone {
+  animation: headlightPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes headlightPulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.95; }
+  100% { opacity: 0.65; }
+}
+
+/* Dust trail puffing behind rear wheel */
+.boda-dust-trail {
+  position: absolute;
+  right: 85%;
+  bottom: 10%;
+  width: 45px;
+  height: 14px;
+  background: radial-gradient(ellipse at center, rgba(226, 232, 240, 0.45) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: dustPuffAnim 0.65s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes dustPuffAnim {
+  0% { opacity: 0.75; transform: scale(0.5) translateX(0); }
+  100% { opacity: 0; transform: scale(1.6) translateX(20px); }
+}
+
+/* Scenic Highway Ride Perspective (Horizon to Foreground) */
+@keyframes bodabodaRoadRide {
+  0% {
+    /* Distant horizon along the winding road */
+    transform: translate3d(68vw, 68%, 0) scale(0.2) rotate(-4deg);
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.95;
+  }
+  32% {
+    /* Mid-stretch plains curve */
+    transform: translate3d(55vw, 75%, 0) scale(0.38) rotate(-7deg);
+    opacity: 1;
+  }
+  62% {
+    /* Leaning forward down into foreground */
+    transform: translate3d(42vw, 83%, 0) scale(0.62) rotate(-6deg);
+    opacity: 1;
+  }
+  86% {
+    /* Cruising past foreground */
+    transform: translate3d(24vw, 91%, 0) scale(0.9) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    /* Exiting past camera */
+    transform: translate3d(5vw, 98%, 0) scale(1.08) rotate(-2deg);
+    opacity: 0;
+  }
+}
+
+/* Mobile Screen Adaptation for Highway Ride */
+@media (max-width: 768px) {
+  .bodaboda-flight-track {
+    width: 105px;
+    height: 68px;
+    animation: bodabodaRoadRideMobile 12s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+  }
+}
+
+@keyframes bodabodaRoadRideMobile {
+  0% {
+    transform: translate3d(78vw, 76%, 0) scale(0.26) rotate(-4deg);
+    opacity: 0;
+  }
+  8% { opacity: 0.95; }
+  45% {
+    transform: translate3d(52vw, 84%, 0) scale(0.5) rotate(-6deg);
+    opacity: 1;
+  }
+  85% {
+    transform: translate3d(22vw, 92%, 0) scale(0.75) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-6vw, 98%, 0) scale(0.85) rotate(-2deg);
+    opacity: 0;
+  }
+}
+
 .hero-container {
   max-width: 1200px;
   margin: 0 auto;

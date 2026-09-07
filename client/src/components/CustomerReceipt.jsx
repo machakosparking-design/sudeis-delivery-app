@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Truck, 
   CheckCircle2, 
   Clock, 
   MapPin, 
   Printer, 
   ArrowLeft, 
   Loader2, 
-  AlertCircle,
-  ShieldCheck,
-  MessageCircle
+  AlertCircle, 
+  ShieldCheck, 
+  MessageCircle 
 } from 'lucide-react';
+import FalconIcon from './FalconIcon';
 import { supabase } from '../supabase';
 import './CustomerReceipt.css';
 
@@ -254,7 +254,7 @@ export default function CustomerReceipt({ orderNumber: initialOrderNumber, onBac
           <div className="receipt-brand-row">
             <div className="receipt-brand-info">
               <div className="receipt-logo-icon">
-                <Truck size={24} />
+                <FalconIcon size={26} color="#FFFFFF" />
               </div>
               <div>
                 <div className="receipt-company-name">Falcon Delivery</div>
