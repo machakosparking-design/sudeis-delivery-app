@@ -217,18 +217,6 @@ export default function LandingPage({ onGoToApp }) {
           </div>
         </div>
 
-        {/* Delivery Rider — follows the winding road in the hero background */}
-        <div className="hero-rider-wrap" aria-hidden="true">
-          <video
-            className="rider-video"
-            src="/rider.mp4"
-            autoPlay
-            muted
-            loop
-            playsInline
-          />
-        </div>
-
         <div className="hero-container">
           <div className="hero-content">
             <div className="hero-badge">
