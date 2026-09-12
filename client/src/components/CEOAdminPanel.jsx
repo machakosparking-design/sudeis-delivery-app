@@ -81,7 +81,7 @@ function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, s
   return null;
 }
 
-export default function CEOAdminPanel({ userRole }) {
+export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTabChange }) {
   const [riders, setRiders] = useState({});
   const [orders, setOrders] = useState([]);
   
@@ -140,7 +140,12 @@ export default function CEOAdminPanel({ userRole }) {
   const [orderPaymentFilter, setOrderPaymentFilter] = useState('all'); // 'all', 'unpaid', 'paid'
 
   const [copiedOrderId, setCopiedOrderId] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' or 'finance'
+  const [internalActiveTab, setInternalActiveTab] = useState('dashboard');
+  const activeTab = propActiveTab !== undefined ? propActiveTab : internalActiveTab;
+  const setActiveTab = (tab) => {
+    setInternalActiveTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
   const [mapClickMode, setMapClickMode] = useState(null); // 'pickup', 'dropoff', null
 
   useEffect(() => {
@@ -2190,7 +2195,7 @@ export default function CEOAdminPanel({ userRole }) {
 
       {/* Right Column: Live Interactive Map */}
       <div className="map-container">
-        <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1000, display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="desktop-only" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1000, display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button className="floating-finance-btn" style={{ position: 'relative', top: 'auto', right: 'auto' }} onClick={() => setActiveTab('finance')}>
             <LayoutDashboard size={16} /> Finance Dashboard
           </button>

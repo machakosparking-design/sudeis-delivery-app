@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Clock, LogOut } from "lucide-react";
 import { supabase } from "../supabase";
 import FalconIcon from "./FalconIcon";
@@ -14,18 +14,20 @@ export default function PendingApprovalScreen({ session }) {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      minHeight: "100vh",
+      minHeight: "100dvh",
       backgroundColor: "#f8fafc",
-      padding: "2rem",
-      textAlign: "center"
+      padding: "max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom))",
+      textAlign: "center",
+      boxSizing: "border-box"
     }}>
       <div style={{
         background: "white",
-        padding: "2.5rem 2rem",
+        padding: "2rem 1.25rem",
         borderRadius: "16px",
-        boxShadow: "0 4px 24px -4px rgba(0,0,0,0.12)",
+        boxShadow: "0 4px 24px -4px rgba(0,0,0,0.08)",
         maxWidth: "460px",
-        width: "100%"
+        width: "100%",
+        boxSizing: "border-box"
       }}>
         <div style={{
           background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",

@@ -5,10 +5,11 @@ import UnauthorizedScreen from './components/UnauthorizedScreen';
 import RiderOnboarding from './components/RiderOnboarding';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
 import RejectedScreen from './components/RejectedScreen';
+import MobileDrawer from './components/MobileDrawer';
 import './index.css';
 import FalconIcon from './components/FalconIcon';
 import CustomerReceipt from './components/CustomerReceipt';
-import { ArrowLeft, Loader2, LogOut } from 'lucide-react';
+import { ArrowLeft, Loader2, LogOut, Menu } from 'lucide-react';
 import { supabase } from './supabase';
 
 
@@ -75,7 +76,9 @@ export default function App() {
   const [roleLoading, setRoleLoading] = useState(false);
   // Dynamic list of active riders for the CEO header tab switcher
   const [activeRidersList, setActiveRidersList] = useState([]);
-
+  const [pendingCount, setPendingCount] = useState(0);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -91,31 +94,43 @@ export default function App() {
         setUserRole(null);
         setUserRiderProfile(null);
         setActiveRidersList([]);
+        setPendingCount(0);
+        setIsMobileMenuOpen(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch active riders list for CEO/superadmin header tab switcher
+  // Fetch active riders list and pending approvals count for CEO/superadmin
   useEffect(() => {
     if (userRole !== 'ceo' && userRole !== 'superadmin') return;
-    const fetchActiveRiders = async () => {
-      const { data } = await supabase
+
+    const fetchRidersData = async () => {
+      // 1. Active riders
+      const { data: active } = await supabase
         .from('riders')
         .select('id, name, rider_code, status')
         .eq('role', 'rider')
         .eq('approval_status', 'active')
         .order('name', { ascending: true });
-      if (data) setActiveRidersList(data);
-    };
-    fetchActiveRiders();
+      if (active) setActiveRidersList(active);
 
-    // Listen for real-time rider changes (new approvals, etc.)
+      // 2. Pending riders count
+      const { count } = await supabase
+        .from('riders')
+        .select('*', { count: 'exact', head: true })
+        .eq('approval_status', 'pending_approval');
+      setPendingCount(count || 0);
+    };
+
+    fetchRidersData();
+
+    // Listen for real-time rider changes (new applications, approvals, status updates)
     const channel = supabase
-      .channel('active-riders-header')
+      .channel('riders-admin-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, () => {
-        fetchActiveRiders();
+        fetchRidersData();
       })
       .subscribe();
 
@@ -344,18 +359,18 @@ export default function App() {
   return (
     <div className="app-container">
       {/* Top Navigation / Role Switcher */}
-      <header className="header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <header className="header app-top-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <button 
             onClick={handleBackToWebsite}
-            className="btn btn-outline"
+            className="btn btn-outline desktop-only"
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
             title="Return to Falcon Delivery Website"
           >
             <ArrowLeft size={16} /> Website
           </button>
 
-          <div className="flex items-center gap-2 text-xl font-bold" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <div style={{
               width: '34px',
               height: '34px',
@@ -370,16 +385,24 @@ export default function App() {
             }}>
               <FalconIcon size={20} color="#ffffff" />
             </div>
-            <span>Falcon Delivery {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}</span>
+            <span className="brand-title" style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>
+              Falcon Delivery <span className="brand-subtitle" style={{ fontSize: '0.8rem', opacity: 0.85, fontWeight: 500 }}>
+                {systemType === 'ceo' ? 'System' : systemType === 'rider' ? 'App' : 'Operations'}
+              </span>
+            </span>
           </div>
         </div>
 
-        <div className="role-selector" style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Desktop Navigation Menu (hidden on mobile) */}
+        <div className="role-selector desktop-nav" style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* CEO Admin tab — shown to 'ceo' or 'superadmin' */}
           {(userRole === 'ceo' || userRole === 'superadmin') && (!systemType || systemType === 'ceo' || userRole === 'superadmin') && (
             <button 
               className={`btn ${currentRole === 'ceo' ? 'btn-outline' : ''}`}
-              onClick={() => setCurrentRole('ceo')}
+              onClick={() => {
+                setCurrentRole('ceo');
+                setActiveTab('dashboard');
+              }}
               style={currentRole !== 'ceo' ? { backgroundColor: 'transparent', color: 'rgba(255,255,255,0.7)', border: 'none' } : {}}
             >
               CEO Admin
@@ -397,7 +420,6 @@ export default function App() {
               🏍️ {rider.name}
             </button>
           ))}
-
 
           {/* Regular riders only see their own active courier badge */}
           {userRole === 'rider' && userRiderProfile && (
@@ -446,7 +468,63 @@ export default function App() {
             <LogOut size={16} /> Sign Out
           </button>
         </div>
+
+        {/* Mobile Header Right (Hamburger Button + Notifications) */}
+        <div className="mobile-header-right">
+          {/* Pending approval badge for CEO/Superadmin */}
+          {(userRole === 'ceo' || userRole === 'superadmin') && pendingCount > 0 && (
+            <button
+              onClick={() => {
+                setCurrentRole('ceo');
+                setActiveTab('riders');
+                setIsMobileMenuOpen(true);
+              }}
+              className="mobile-pending-pill"
+              title={`${pendingCount} pending rider applications`}
+            >
+              <span className="mobile-pending-dot"></span>
+              <span>{pendingCount} Pending</span>
+            </button>
+          )}
+
+          {/* Courier badge for rider */}
+          {userRole === 'rider' && userRiderProfile && (
+            <div className="mobile-rider-pill">
+              <span>🏍️ {userRiderProfile.name?.split(' ')[0] || 'Courier'}</span>
+            </div>
+          )}
+
+          {/* Hamburger Menu Toggle Button */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="mobile-menu-trigger-btn"
+            aria-label="Open Navigation Menu"
+            title="Open Menu"
+          >
+            <Menu size={22} />
+            {(userRole === 'ceo' || userRole === 'superadmin') && pendingCount > 0 && (
+              <span className="mobile-menu-alert-dot"></span>
+            )}
+          </button>
+        </div>
       </header>
+
+      {/* Mobile Slide-Out Drawer */}
+      <MobileDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        userRole={userRole}
+        userRiderProfile={userRiderProfile}
+        session={session}
+        currentRole={currentRole}
+        onSelectRole={(role) => setCurrentRole(role)}
+        activeRidersList={activeRidersList}
+        pendingCount={pendingCount}
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab)}
+        onSignOut={handleSignOut}
+        onBackToWebsite={handleBackToWebsite}
+      />
 
       {/* Main System Content with Suspense Loading */}
       <Suspense fallback={
@@ -456,7 +534,11 @@ export default function App() {
         </div>
       }>
         {currentRole === 'ceo' && (userRole === 'ceo' || userRole === 'superadmin') ? (
-          <CEOAdminPanel userRole={userRole} />
+          <CEOAdminPanel 
+            userRole={userRole} 
+            activeTab={activeTab} 
+            onTabChange={(t) => setActiveTab(t)} 
+          />
         ) : (
           <RiderApp 
             riderCode={userRole === 'rider' ? (userRiderProfile?.rider_code || 'rider') : currentRole} 

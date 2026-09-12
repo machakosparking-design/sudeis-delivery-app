@@ -67,17 +67,19 @@ export default function RiderOnboarding({ session, onComplete }) {
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
-      minHeight: '100vh',
+      minHeight: '100dvh',
       backgroundColor: '#f8fafc',
-      padding: '2rem'
+      padding: 'max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom))',
+      boxSizing: 'border-box'
     }}>
       <div style={{
         background: 'white',
-        padding: '2.5rem 2rem',
+        padding: '1.75rem 1.25rem',
         borderRadius: '16px',
-        boxShadow: '0 4px 24px -4px rgba(0,0,0,0.12)',
+        boxShadow: '0 4px 24px -4px rgba(0,0,0,0.08)',
         width: '100%',
-        maxWidth: '440px'
+        maxWidth: '440px',
+        boxSizing: 'border-box'
       }}>
         {/* Header */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
