@@ -140,13 +140,40 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
   const [focusCoords, setFocusCoords] = useState(null);
   const [selectedRiderId, setSelectedRiderId] = useState(null);
 
-  const handleFocusRider = (rider) => {
-    if (!rider.current_lat || !rider.current_lng) {
+  const handleFocusRider = async (rider) => {
+    if (!rider) return;
+    const currentRider = riders[rider.id] || rider;
+    let lat = currentRider.current_lat;
+    let lng = currentRider.current_lng;
+
+    // If coordinates are not in memory, query the database directly in case they were freshly written
+    if (!lat || !lng) {
+      try {
+        const { data } = await supabase
+          .from('riders')
+          .select('id, name, current_lat, current_lng, status')
+          .eq('id', rider.id)
+          .maybeSingle();
+
+        if (data && data.current_lat && data.current_lng) {
+          lat = data.current_lat;
+          lng = data.current_lng;
+          setRiders(prev => ({
+            ...prev,
+            [rider.id]: { ...prev[rider.id], ...data }
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not refresh rider coordinates:', err);
+      }
+    }
+
+    if (!lat || !lng) {
       alert(`${rider.name || 'This rider'} has not broadcasted their GPS location yet or is currently offline.`);
       return;
     }
     setActiveTab('dashboard');
-    setFocusCoords([rider.current_lat, rider.current_lng, Date.now()]);
+    setFocusCoords([lat, lng, Date.now()]);
     setSelectedRiderId(rider.id);
   };
   
@@ -267,8 +294,11 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, payload => {
-        if (payload.eventType === 'UPDATE') {
-          setRiders(prev => ({ ...prev, [payload.new.id]: { ...prev[payload.new.id], ...payload.new } }));
+        if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+          setRiders(prev => ({
+            ...prev,
+            [payload.new.id]: { ...(prev[payload.new.id] || {}), ...payload.new }
+          }));
         }
       })
       .subscribe();
@@ -276,10 +306,15 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
     // Fleet GPS subscription (supports Pusher with fallback to throttled Supabase)
     const unsubscribeGps = subscribeToFleetGps(({ riderId, lat, lng }) => {
       setRiders(prev => {
-        if (!prev[riderId]) return prev;
+        const existing = prev[riderId] || { id: riderId };
         return {
           ...prev,
-          [riderId]: { ...prev[riderId], current_lat: lat, current_lng: lng }
+          [riderId]: {
+            ...existing,
+            current_lat: lat,
+            current_lng: lng,
+            status: existing.status === 'busy' ? 'busy' : 'online'
+          }
         };
       });
     });

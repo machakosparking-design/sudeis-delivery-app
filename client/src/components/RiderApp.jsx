@@ -290,11 +290,23 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
     };
   }, [rider.id, isOnline, rider.status, soundEnabled]);
 
-  // 4. HTML5 GPS Tracking with Pusher + Intelligent 10s Throttling
+  // 4. HTML5 GPS Tracking with Pusher + Persistent Supabase Broadcast
   useEffect(() => {
     if (!rider.id || !isOnline) return;
 
     if ('geolocation' in navigator) {
+      // Immediate high-accuracy GPS fix on activation
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setCurrentCoords({ lat, lng });
+          broadcastRiderLocation(rider.id, lat, lng, true);
+        },
+        (err) => console.warn('Rider immediate GPS warning:', err.message),
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
+      );
+
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
           const lat = position.coords.latitude;
@@ -303,7 +315,7 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
           broadcastRiderLocation(rider.id, lat, lng);
         },
         (error) => console.warn('Rider GPS Warning:', error.message),
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 8000 }
       );
     }
 
@@ -318,9 +330,33 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
   // ── Action Handlers ─────────────────────────────────────────────────────────
 
   const handleToggleOnline = async (e) => {
-    const newStatus = e.target.checked ? 'online' : 'offline';
-    await supabase.from('riders').update({ status: newStatus }).eq('id', rider.id);
+    const isChecking = e.target.checked;
+    const newStatus = isChecking ? 'online' : 'offline';
     setRider(prev => ({ ...prev, status: newStatus }));
+
+    if (isChecking && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setCurrentCoords({ lat, lng });
+          await supabase.from('riders').update({
+            status: 'online',
+            current_lat: lat,
+            current_lng: lng,
+            updated_at: new Date().toISOString()
+          }).eq('id', rider.id);
+          broadcastRiderLocation(rider.id, lat, lng, true);
+        },
+        async (err) => {
+          console.warn('Initial geolocation fetch error:', err.message);
+          await supabase.from('riders').update({ status: 'online' }).eq('id', rider.id);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 }
+      );
+    } else {
+      await supabase.from('riders').update({ status: newStatus }).eq('id', rider.id);
+    }
   };
 
   const handleAcceptOrder = async () => {

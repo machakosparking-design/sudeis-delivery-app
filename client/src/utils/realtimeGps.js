@@ -26,7 +26,7 @@ if (PUSHER_KEY) {
 // Memory cache to throttle location broadcasts per rider
 const lastBroadcastTimes = {};
 const lastCoordinates = {};
-const THROTTLE_INTERVAL_MS = 10000; // 10 seconds minimum between GPS broadcasts
+const THROTTLE_INTERVAL_MS = 8000; // 8 seconds between regular GPS broadcasts
 
 /**
  * Calculates distance in meters between two lat/lng points using Haversine formula
@@ -46,76 +46,112 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Persistent Supabase Realtime channel for fleet GPS
+let persistentGpsChannel = null;
+function getGpsChannel() {
+  if (!persistentGpsChannel) {
+    persistentGpsChannel = supabase.channel('fleet-gps-realtime', {
+      config: { broadcast: { self: false } }
+    });
+    persistentGpsChannel.subscribe((status) => {
+      console.log('📡 Fleet GPS broadcast channel status:', status);
+    });
+  }
+  return persistentGpsChannel;
+}
+
 /**
  * Broadcasts rider GPS location.
- * Uses Pusher client trigger if enabled, or falls back to Supabase Realtime broadcast.
+ * 1. Always writes to Supabase database (riders.current_lat / current_lng) so it's instantly visible.
+ * 2. Broadcasts via Supabase Realtime WebSocket for sub-second updates on the CEO map.
  */
-export function broadcastRiderLocation(riderId, lat, lng, force = false) {
+export async function broadcastRiderLocation(riderId, lat, lng, force = false) {
   if (!riderId || lat == null || lng == null) return;
 
   const now = Date.now();
   const lastTime = lastBroadcastTimes[riderId] || 0;
   const lastCoord = lastCoordinates[riderId];
 
-  // If not forced, enforce minimum 10s throttle unless rider moved > 25 meters
-  if (!force) {
+  // If not forced and we already have a previous coordinate, throttle
+  if (!force && lastCoord) {
     const elapsed = now - lastTime;
     if (elapsed < THROTTLE_INTERVAL_MS) {
-      if (lastCoord) {
-        const movedMeters = getDistanceMeters(lastCoord.lat, lastCoord.lng, lat, lng);
-        if (movedMeters < 25) {
-          // Skip redundant ping to save bandwidth and battery
-          return;
-        }
-      } else {
+      const movedMeters = getDistanceMeters(lastCoord.lat, lastCoord.lng, lat, lng);
+      if (movedMeters < 15) {
+        // Skip redundant ping to save battery
         return;
       }
     }
   }
 
-  // Update cache
+  // Update memory cache
   lastBroadcastTimes[riderId] = now;
   lastCoordinates[riderId] = { lat, lng };
 
   const payload = { riderId, lat, lng, timestamp: now };
 
-  // 1. Try Pusher broadcast if channel is active
-  let sentViaPusher = false;
-  if (pusherChannel && pusherInstance) {
-    try {
-      sentViaPusher = pusherChannel.trigger('client-location_update', payload);
-    } catch {
-      sentViaPusher = false;
-    }
+  // 1. Immediately persist to database (riders table)
+  // This triggers Supabase Postgres changes on every CEO screen & saves coords permanently
+  try {
+    supabase
+      .from('riders')
+      .update({
+        current_lat: lat,
+        current_lng: lng,
+        status: 'online',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', riderId)
+      .then(() => {})
+      .catch((err) => console.warn('DB GPS update error:', err));
+  } catch (err) {
+    console.warn('Failed to update DB location:', err);
   }
 
-  // 2. If Pusher was not sent (or fallback needed), broadcast via Supabase channel
-  if (!sentViaPusher) {
+  // 2. High-speed WebSocket broadcast via persistent Supabase channel
+  try {
+    const channel = getGpsChannel();
+    channel.send({
+      type: 'broadcast',
+      event: 'location_update',
+      payload
+    });
+  } catch (err) {
+    console.error('Failed to broadcast location via Supabase:', err);
+  }
+
+  // 3. Also try Pusher if configured
+  if (pusherChannel && pusherInstance) {
     try {
-      const channel = supabase.channel('rider-gps');
-      channel.send({
-        type: 'broadcast',
-        event: 'location_update',
-        payload
-      });
-    } catch (err) {
-      console.error('Failed to broadcast location:', err);
+      pusherChannel.trigger('client-location_update', payload);
+    } catch {
+      // Ignored if client triggers not enabled
     }
   }
 }
 
 /**
  * Subscribes to fleet GPS updates (used by CEO Admin map).
- * Calls callback({ riderId, lat, lng }) whenever a rider moves.
+ * Calls callback({ riderId, lat, lng }) whenever a rider broadcasts their location.
  * Returns an unsubscribe cleanup function.
  */
 export function subscribeToFleetGps(onLocationUpdate) {
   const cleanups = [];
 
-  // Listen to Pusher events
+  // Listen on persistent Supabase Realtime channel
+  const channel = getGpsChannel();
+  channel.on('broadcast', { event: 'location_update' }, ({ payload }) => {
+    if (payload && payload.riderId && payload.lat && payload.lng) {
+      onLocationUpdate(payload);
+    }
+  });
+
+  // Listen to Pusher events if active
   if (pusherChannel) {
     const handler = (data) => {
-      onLocationUpdate(data);
+      if (data && data.riderId && data.lat && data.lng) {
+        onLocationUpdate(data);
+      }
     };
     pusherChannel.bind('client-location_update', handler);
     pusherChannel.bind('location_update', handler);
@@ -125,17 +161,6 @@ export function subscribeToFleetGps(onLocationUpdate) {
       pusherChannel.unbind('location_update', handler);
     });
   }
-
-  // Also listen to Supabase Realtime channel as fallback
-  const gpsChannel = supabase.channel('rider-gps')
-    .on('broadcast', { event: 'location_update' }, ({ payload }) => {
-      onLocationUpdate(payload);
-    })
-    .subscribe();
-
-  cleanups.push(() => {
-    supabase.removeChannel(gpsChannel);
-  });
 
   return () => {
     cleanups.forEach(fn => fn());
