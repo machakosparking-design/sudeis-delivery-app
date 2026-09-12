@@ -30,6 +30,10 @@ export default function RiderOnboarding({ session, onComplete }) {
 
     setLoading(true);
     try {
+      // Generate clean unique rider code from name (satisfies NOT NULL and UNIQUE constraint)
+      const cleanName = form.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').substring(0, 16);
+      const autoCode = `${cleanName || 'rider'}_${Math.floor(100 + Math.random() * 900)}`;
+
       const { error: insertError } = await supabase.from('riders').insert({
         auth_user_id: session.user.id,
         name: form.name.trim(),
@@ -39,7 +43,7 @@ export default function RiderOnboarding({ session, onComplete }) {
         role: 'rider',
         approval_status: 'pending_approval',
         status: 'offline',
-        rider_code: null,
+        rider_code: autoCode,
         orders_completed: 0,
         earnings: 0,
       });
