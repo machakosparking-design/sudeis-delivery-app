@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { 
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
   LayoutDashboard, Map as MapIcon, MousePointerClick, Plus, Trash2, 
   Layers, Phone, MessageCircle, Copy, Check, ArrowRight, X, Clock,
   CheckCircle, Receipt, AlertCircle, Loader2, RefreshCw, FileText, KeyRound,
-  Printer
+  Printer, Navigation
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { subscribeToFleetGps } from '../utils/realtimeGps';
@@ -33,13 +33,51 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const createRiderIcon = (status) => {
-  const color = status === 'online' ? '#10B981' : status === 'busy' ? '#F59E0B' : '#64748B';
+// Upgraded Courier Pin with Status Color & First-Name Tag
+const createRiderIcon = (rider, isSelected = false) => {
+  const statusColor = rider.status === 'online' ? '#10B981' : rider.status === 'busy' ? '#F59E0B' : '#64748B';
+  const cleanName = (rider.name || 'Courier').split(' ')[0];
+  const borderRing = isSelected ? '3px solid #3B82F6' : '2px solid #FFFFFF';
+  const shadow = isSelected ? '0 0 16px rgba(59, 130, 246, 0.8)' : '0 3px 10px rgba(0,0,0,0.3)';
+
   return L.divIcon({
-    className: 'custom-icon',
-    html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11]
+    className: 'custom-rider-pin',
+    html: `
+      <div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
+        <div style="
+          position: relative;
+          background: ${statusColor};
+          width: 32px;
+          height: 32px;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          border: ${borderRing};
+          box-shadow: ${shadow};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <span style="transform: rotate(45deg); font-size: 14px; line-height: 1;">🏍️</span>
+        </div>
+        <div style="
+          background: ${isSelected ? '#1D4ED8' : 'rgba(15, 23, 42, 0.9)'};
+          color: #FFFFFF;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 10px;
+          margin-top: 4px;
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.25);
+          letter-spacing: 0.3px;
+        ">
+          ${cleanName}
+        </div>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0]
   });
 };
 
@@ -81,15 +119,15 @@ function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, s
   return null;
 }
 
-// Map pan/zoom controller for smooth flying to rider locations
-function MapFlyController({ targetCoords, zoom = 16 }) {
+// Map pan/zoom controller for smooth flying to rider locations (snappy 1.2s glide at zoom 15.5)
+function MapFlyController({ targetCoords, zoom = 15.5 }) {
   const map = useMap();
   useEffect(() => {
     if (targetCoords && targetCoords[0] != null && targetCoords[1] != null) {
       map.flyTo([targetCoords[0], targetCoords[1]], zoom, {
         animate: true,
-        duration: 1.5,
-        easeLinearity: 0.25
+        duration: 1.2,
+        easeLinearity: 0.35
       });
     }
   }, [targetCoords, zoom, map]);
@@ -1333,6 +1371,11 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
     );
   }
 
+  const selectedRider = selectedRiderId ? riders[selectedRiderId] : null;
+  const selectedRiderActiveOrder = selectedRiderId
+    ? orders.find(o => o.assigned_rider_id === selectedRiderId && o.status !== 'delivered')
+    : null;
+
   return (
     <div className="dashboard-grid">
       {/* Super Admin Mode Banner */}
@@ -2314,18 +2357,53 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
         </div>
 
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
-          <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {/* High-Speed Global CDN Retina Tiles (CartoDB Voyager) - Crystal sharp text & zero blur */}
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
+            maxNativeZoom={19}
+            keepBuffer={6}
+            updateWhenZooming={false}
+            updateWhenIdle={true}
+          />
           
           {/* Smooth camera pan to focused rider */}
-          <MapFlyController targetCoords={focusCoords ? [focusCoords[0], focusCoords[1]] : null} zoom={16} />
+          <MapFlyController targetCoords={focusCoords ? [focusCoords[0], focusCoords[1]] : null} zoom={15.5} />
 
           {/* Highlight ring around selected rider */}
           {selectedRiderId && riders[selectedRiderId]?.current_lat && (
             <Circle
               center={[riders[selectedRiderId].current_lat, riders[selectedRiderId].current_lng]}
-              radius={100}
-              pathOptions={{ color: '#2563EB', fillColor: '#3B82F6', fillOpacity: 0.35, weight: 2 }}
+              radius={120}
+              pathOptions={{ color: '#2563EB', fillColor: '#3B82F6', fillOpacity: 0.25, weight: 2 }}
             />
+          )}
+
+          {/* Live Delivery Route line: connects focused rider to their customer dropoff */}
+          {selectedRider && selectedRider.current_lat && selectedRiderActiveOrder && selectedRiderActiveOrder.dropoff_lat && (
+            <>
+              <Polyline
+                positions={[
+                  [selectedRider.current_lat, selectedRider.current_lng],
+                  [selectedRiderActiveOrder.dropoff_lat, selectedRiderActiveOrder.dropoff_lng]
+                ]}
+                pathOptions={{
+                  color: '#2563EB',
+                  weight: 4,
+                  dashArray: '8, 8',
+                  opacity: 0.85
+                }}
+              />
+              <Marker position={[selectedRiderActiveOrder.dropoff_lat, selectedRiderActiveOrder.dropoff_lng]}>
+                <Popup>
+                  <strong>📍 Destination Drop-off</strong><br/>
+                  {selectedRiderActiveOrder.dropoff}<br/>
+                  Customer: {selectedRiderActiveOrder.customer_name}
+                </Popup>
+              </Marker>
+            </>
           )}
           
           <MapInteraction 
@@ -2352,14 +2430,34 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
             </Marker>
           )}
 
+          {/* Active Couriers on the Map with Custom Teardrop Pins and Name Tags */}
           {Object.values(riders).map((rider) => {
             if (rider.status !== 'offline' && rider.current_lat) {
+              const isSelected = selectedRiderId === rider.id;
               return (
-                <Marker key={rider.id} position={[rider.current_lat, rider.current_lng]} icon={createRiderIcon(rider.status)}>
+                <Marker 
+                  key={rider.id} 
+                  position={[rider.current_lat, rider.current_lng]} 
+                  icon={createRiderIcon(rider, isSelected)}
+                  eventHandlers={{
+                    click: () => handleFocusRider(rider),
+                  }}
+                >
                   <Popup>
-                    <strong>{rider.name}</strong><br/>
-                    Status: <span style={{textTransform: 'capitalize'}}>{rider.status}</span><br/>
-                    Orders Today: {rider.orders_completed || 0}
+                    <div style={{ minWidth: '150px' }}>
+                      <strong style={{ fontSize: '0.95rem' }}>{rider.name}</strong><br/>
+                      <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
+                        Status: <strong style={{ textTransform: 'capitalize', color: rider.status === 'online' ? '#16A34A' : '#D97706' }}>{rider.status}</strong>
+                      </span><br/>
+                      {rider.phone && (
+                        <div style={{ marginTop: '4px', fontSize: '0.8rem' }}>
+                          📞 <a href={`tel:${rider.phone}`} style={{ color: '#2563EB', fontWeight: 600 }}>{rider.phone}</a>
+                        </div>
+                      )}
+                      <div style={{ marginTop: '2px', fontSize: '0.75rem', color: '#64748B' }}>
+                        Trips Today: {rider.orders_completed || 0}
+                      </div>
+                    </div>
                   </Popup>
                 </Marker>
               );
@@ -2377,6 +2475,190 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
             </React.Fragment>
           ))}
         </MapContainer>
+
+        {/* Floating Courier Card when a rider is clicked / selected */}
+        {selectedRider && (
+          <div style={{
+            position: 'absolute',
+            bottom: '16px',
+            left: '16px',
+            right: '16px',
+            maxWidth: '420px',
+            margin: '0 auto',
+            background: 'rgba(255, 255, 255, 0.98)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '16px',
+            boxShadow: '0 12px 35px rgba(15, 23, 42, 0.22)',
+            border: '1px solid #E2E8F0',
+            padding: '1rem 1.15rem',
+            zIndex: 1000,
+            animation: 'modalSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: selectedRider.status === 'online' ? '#10B981' : selectedRider.status === 'busy' ? '#F59E0B' : '#64748B',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem',
+                  boxShadow: '0 3px 10px rgba(0,0,0,0.15)'
+                }}>
+                  🏍️
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#0F172A' }}>
+                    {selectedRider.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '1px 7px',
+                      borderRadius: '10px',
+                      backgroundColor: selectedRider.status === 'online' ? '#DCFCE7' : selectedRider.status === 'busy' ? '#FEF3C7' : '#F1F5F9',
+                      color: selectedRider.status === 'online' ? '#15803D' : selectedRider.status === 'busy' ? '#B45309' : '#475569',
+                      textTransform: 'capitalize'
+                    }}>
+                      ● {selectedRider.status === 'busy' ? 'On Delivery' : selectedRider.status}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                      • {selectedRider.orders_completed || 0} completed
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedRiderId(null)}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '30px',
+                  height: '30px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748B',
+                  cursor: 'pointer'
+                }}
+                title="Close Courier Card"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Active Order Info Strip */}
+            {selectedRiderActiveOrder ? (
+              <div style={{
+                background: '#F0F9FF',
+                border: '1px solid #BAE6FD',
+                borderRadius: '10px',
+                padding: '0.6rem 0.8rem',
+                fontSize: '0.82rem',
+                color: '#0369A1'
+              }}>
+                <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>📦 Order #{selectedRiderActiveOrder.order_number || selectedRiderActiveOrder.id.slice(0, 8)}</span>
+                  <span style={{ color: '#0284C7', fontWeight: 800 }}>KES {selectedRiderActiveOrder.delivery_fee || selectedRiderActiveOrder.fee || '—'}</span>
+                </div>
+                <div style={{ marginTop: '3px', color: '#334155', fontSize: '0.78rem' }}>
+                  📍 To: <strong>{selectedRiderActiveOrder.dropoff}</strong> ({selectedRiderActiveOrder.customer_name})
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: '#F8FAFC',
+                border: '1px dashed #CBD5E1',
+                borderRadius: '10px',
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.78rem',
+                color: '#64748B',
+                textAlign: 'center'
+              }}>
+                ✨ Available — No active order assigned currently
+              </div>
+            )}
+
+            {/* Quick Communication Actions */}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {selectedRider.phone && (
+                <>
+                  <a
+                    href={`tel:${selectedRider.phone}`}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      padding: '0.55rem',
+                      background: '#0F172A',
+                      color: '#FFFFFF',
+                      borderRadius: '10px',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      textDecoration: 'none',
+                      boxShadow: '0 2px 6px rgba(15, 23, 42, 0.15)'
+                    }}
+                  >
+                    <Phone size={14} /> Call
+                  </a>
+                  <a
+                    href={`https://wa.me/${formatKenyanPhone(selectedRider.phone)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      padding: '0.55rem',
+                      background: '#25D366',
+                      color: '#FFFFFF',
+                      borderRadius: '10px',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      textDecoration: 'none',
+                      boxShadow: '0 2px 6px rgba(37, 211, 102, 0.25)'
+                    }}
+                  >
+                    <MessageCircle size={14} /> WhatsApp
+                  </a>
+                </>
+              )}
+
+              <button
+                onClick={() => handleFocusRider(selectedRider)}
+                style={{
+                  padding: '0.55rem 0.8rem',
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '10px',
+                  color: '#2563EB',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+                title="Re-center on Rider"
+              >
+                <Navigation size={14} /> Center
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
