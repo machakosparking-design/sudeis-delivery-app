@@ -2,11 +2,15 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import LandingPage from './components/LandingPage';
 import AuthLogin from './components/AuthLogin';
 import UnauthorizedScreen from './components/UnauthorizedScreen';
+import RiderOnboarding from './components/RiderOnboarding';
+import PendingApprovalScreen from './components/PendingApprovalScreen';
+import RejectedScreen from './components/RejectedScreen';
 import './index.css';
 import FalconIcon from './components/FalconIcon';
 import CustomerReceipt from './components/CustomerReceipt';
 import { ArrowLeft, Loader2, LogOut } from 'lucide-react';
 import { supabase } from './supabase';
+
 
 // Lazy-load heavy components so landing page visitors download 0 extra weight!
 const CEOAdminPanel = lazy(() => import('./components/CEOAdminPanel'));
@@ -69,6 +73,9 @@ export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [userRiderProfile, setUserRiderProfile] = useState(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  // Dynamic list of active riders for the CEO header tab switcher
+  const [activeRidersList, setActiveRidersList] = useState([]);
+
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -83,11 +90,39 @@ export default function App() {
       if (!session) {
         setUserRole(null);
         setUserRiderProfile(null);
+        setActiveRidersList([]);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch active riders list for CEO/superadmin header tab switcher
+  useEffect(() => {
+    if (userRole !== 'ceo' && userRole !== 'superadmin') return;
+    const fetchActiveRiders = async () => {
+      const { data } = await supabase
+        .from('riders')
+        .select('id, name, rider_code, status')
+        .eq('role', 'rider')
+        .eq('approval_status', 'active')
+        .order('name', { ascending: true });
+      if (data) setActiveRidersList(data);
+    };
+    fetchActiveRiders();
+
+    // Listen for real-time rider changes (new approvals, etc.)
+    const channel = supabase
+      .channel('active-riders-header')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, () => {
+        fetchActiveRiders();
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [userRole]);
+
+
 
   // Fetch the user's role and rider profile from the riders table once logged in
   useEffect(() => {
@@ -101,21 +136,21 @@ export default function App() {
 
       // 1. Check if role was set directly in Auth user metadata (Dashboard -> Auth -> Users)
       const metaRole = session.user.user_metadata?.role || session.user.app_metadata?.role;
-      if (metaRole) {
+      if (metaRole && (metaRole === 'ceo' || metaRole === 'superadmin')) {
         setUserRole(metaRole);
         setRoleLoading(false);
         return;
       }
 
-      // 2. Query riders table by auth_user_id (no single() to prevent PGRST116 if multiple rows match)
+      // 2. Query riders table by auth_user_id
       const { data, error } = await supabase
         .from('riders')
-        .select('id, name, role, rider_code')
+        .select('id, name, role, rider_code, approval_status')
         .eq('auth_user_id', session.user.id);
 
       if (error || !data || data.length === 0) {
-        console.warn('No rider profile found for user:', session.user.id, error);
-        setUserRole('unknown');
+        // No rider profile at all → show onboarding
+        setUserRole('onboarding');
         setUserRiderProfile(null);
       } else {
         // Priority: superadmin > ceo > rider
@@ -124,12 +159,30 @@ export default function App() {
         const activeProfile = superAdminRow || ceoRow || data[0];
         const effectiveRole = superAdminRow ? 'superadmin' : ceoRow ? 'ceo' : (activeProfile.role || 'rider');
 
-        setUserRole(effectiveRole);
-        setUserRiderProfile(activeProfile);
+        // CEO/superadmin bypass approval checks
+        if (effectiveRole === 'ceo' || effectiveRole === 'superadmin') {
+          setUserRole(effectiveRole);
+          setUserRiderProfile(activeProfile);
+          setRoleLoading(false);
+          return;
+        }
 
-        // If regular rider, strictly bind their currentRole to their assigned rider_code
-        if (effectiveRole === 'rider' && activeProfile.rider_code) {
-          setCurrentRole(activeProfile.rider_code);
+        // For regular riders, check approval_status
+        const approvalStatus = activeProfile.approval_status || 'active';
+        if (approvalStatus === 'pending_approval') {
+          setUserRole('pending_approval');
+          setUserRiderProfile(activeProfile);
+        } else if (approvalStatus === 'rejected') {
+          setUserRole('rejected');
+          setUserRiderProfile(activeProfile);
+        } else {
+          // active rider
+          setUserRole('rider');
+          setUserRiderProfile(activeProfile);
+          // Strictly bind their currentRole to their assigned rider_code
+          if (activeProfile.rider_code) {
+            setCurrentRole(activeProfile.rider_code);
+          }
         }
       }
       setRoleLoading(false);
@@ -137,6 +190,7 @@ export default function App() {
 
     fetchUserRole();
   }, [session?.user?.id]);
+
 
   // Listen to popstate / browser history navigation
   useEffect(() => {
@@ -243,18 +297,48 @@ export default function App() {
 
   // ── RBAC Gate ──────────────────────────────────────────────────────────────
   // Superadmin bypasses all gates — full access to everything
-  // Block riders from accessing the CEO panel and unknown users from anything
-  if (userRole === 'unknown') {
-    return <UnauthorizedScreen userRole={userRole} requestedContext={systemType} session={session} />;
+
+  // New rider who just signed up but hasn't filled their profile yet
+  if (userRole === 'onboarding') {
+    return (
+      <RiderOnboarding
+        session={session}
+        onComplete={() => {
+          // Re-fetch by resetting role so the useEffect triggers
+          setUserRole(null);
+          setRoleLoading(true);
+          // Trigger re-fetch by updating a dependency
+          supabase
+            .from('riders')
+            .select('id, name, role, rider_code, approval_status')
+            .eq('auth_user_id', session.user.id)
+            .then(({ data }) => {
+              if (data && data.length > 0) {
+                setUserRole('pending_approval');
+                setUserRiderProfile(data[0]);
+              }
+              setRoleLoading(false);
+            });
+        }}
+      />
+    );
   }
+
+  // Rider submitted profile but awaiting CEO approval
+  if (userRole === 'pending_approval') {
+    return <PendingApprovalScreen session={session} />;
+  }
+
+  // Rider was rejected by CEO
+  if (userRole === 'rejected') {
+    return <RejectedScreen session={session} />;
+  }
+
+  // Block riders from accessing the CEO panel
   if (systemType === 'ceo' && userRole !== 'ceo' && userRole !== 'superadmin') {
     return <UnauthorizedScreen userRole={userRole} requestedContext="ceo" session={session} />;
   }
 
-  if (systemType === 'rider' && (userRole === 'ceo' || userRole === 'superadmin')) {
-    // CEOs / Superadmins navigating to the rider app: allow (they may want to monitor)
-    // but ensure the tab switcher doesn't show CEO options on rider subdomain (unless superadmin)
-  }
 
   // Delivery System View (CEO Admin & Rider App)
   return (
@@ -303,16 +387,17 @@ export default function App() {
           )}
           
           {/* Multi-Rider tabs — ONLY shown to CEO or SuperAdmin for fleet management / monitoring */}
-          {(userRole === 'ceo' || userRole === 'superadmin') && ['rider_1', 'rider_2', 'rider_3'].map(riderId => (
-            <button 
-              key={riderId}
-              className={`btn ${currentRole === riderId ? 'btn-outline' : ''}`}
-              onClick={() => setCurrentRole(riderId)}
-              style={currentRole !== riderId ? { backgroundColor: 'transparent', color: 'rgba(255,255,255,0.7)', border: 'none' } : {}}
+          {(userRole === 'ceo' || userRole === 'superadmin') && activeRidersList.map(rider => (
+            <button
+              key={rider.id}
+              className={`btn ${currentRole === rider.rider_code ? 'btn-outline' : ''}`}
+              onClick={() => setCurrentRole(rider.rider_code)}
+              style={currentRole !== rider.rider_code ? { backgroundColor: 'transparent', color: 'rgba(255,255,255,0.7)', border: 'none' } : {}}
             >
-              {riderId === 'rider_1' ? 'Rider 1' : riderId === 'rider_2' ? 'Rider 2' : 'Rider 3'}
+              🏍️ {rider.name}
             </button>
           ))}
+
 
           {/* Regular riders only see their own active courier badge */}
           {userRole === 'rider' && userRiderProfile && (

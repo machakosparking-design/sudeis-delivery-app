@@ -752,9 +752,242 @@ export default function CEOAdminPanel({ userRole }) {
 
   const paidOrdersList = orders.filter(o => o.status === 'paid' || o.mpesa_receipt);
 
+  // ── Riders Management Tab (CEO + Superadmin) ─────────────────────────────
+  if (activeTab === 'riders') {
+    const allRiders = Object.values(riders);
+    const pendingRiders = allRiders.filter(r => r.approval_status === 'pending_approval');
+    const activeRidersList = allRiders.filter(r => r.approval_status === 'active' && r.role === 'rider');
+    const rejectedRiders = allRiders.filter(r => r.approval_status === 'rejected');
+
+    const handleApprove = async (rider) => {
+      const customCode = window.prompt(
+        `Approve ${rider.name}?\n\nEnter a rider code (or leave blank to use their name):`,
+        rider.name?.toLowerCase().replace(/\s+/g, '_') || ''
+      );
+      if (customCode === null) return; // cancelled
+
+      const { error } = await supabase.rpc('approve_rider', {
+        p_rider_id: rider.id,
+        p_rider_code: customCode.trim() || null
+      });
+
+      if (error) {
+        alert(`Error approving rider: ${error.message}`);
+      } else {
+        const { data } = await supabase.from('riders').select('*');
+        if (data) {
+          const rMap = {};
+          data.forEach(r => rMap[r.id] = r);
+          setRiders(rMap);
+        }
+      }
+    };
+
+    const handleReject = async (rider) => {
+      if (!window.confirm(`Reject ${rider.name}'s application? They will see a rejection message.`)) return;
+      const { error } = await supabase.rpc('reject_rider', { p_rider_id: rider.id });
+      if (error) {
+        alert(`Error rejecting rider: ${error.message}`);
+      } else {
+        const { data } = await supabase.from('riders').select('*');
+        if (data) {
+          const rMap = {};
+          data.forEach(r => rMap[r.id] = r);
+          setRiders(rMap);
+        }
+      }
+    };
+
+    const handleReApprove = async (rider) => {
+      const customCode = window.prompt(
+        `Re-approve ${rider.name}?\n\nEnter a rider code:`,
+        rider.name?.toLowerCase().replace(/\s+/g, '_') || ''
+      );
+      if (customCode === null) return;
+      const { error } = await supabase.rpc('approve_rider', {
+        p_rider_id: rider.id,
+        p_rider_code: customCode.trim() || null
+      });
+      if (error) {
+        alert(`Error re-approving rider: ${error.message}`);
+      } else {
+        const { data } = await supabase.from('riders').select('*');
+        if (data) {
+          const rMap = {};
+          data.forEach(r => rMap[r.id] = r);
+          setRiders(rMap);
+        }
+      }
+    };
+
+    const handleEditRiderCode = async (rider) => {
+      const newCode = window.prompt(`Edit rider code for ${rider.name}:`, rider.rider_code || '');
+      if (newCode === null || newCode.trim() === '') return;
+      const { error } = await supabase
+        .from('riders')
+        .update({ rider_code: newCode.trim() })
+        .eq('id', rider.id);
+      if (error) {
+        alert(`Error updating rider code: ${error.message}`);
+      } else {
+        setRiders(prev => ({ ...prev, [rider.id]: { ...prev[rider.id], rider_code: newCode.trim() } }));
+      }
+    };
+
+    const RiderCard = ({ rider, actions }) => (
+      <div key={rider.id} style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1rem',
+        padding: '1rem 1.25rem',
+        background: 'white',
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        flexWrap: 'wrap'
+      }}>
+        {/* Avatar + Info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: 1, minWidth: '200px' }}>
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '50%',
+            background: 'linear-gradient(135deg, #DBEAFE, #EFF6FF)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: '1rem', color: '#2563EB', flexShrink: 0
+          }}>
+            {rider.name?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.95rem' }}>{rider.name || 'Unnamed'}</div>
+            <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '1px' }}>
+              {rider.gender && <span>{rider.gender} • </span>}
+              {rider.age && <span>{rider.age} yrs • </span>}
+              {rider.phone && <span>{rider.phone}</span>}
+              {rider.rider_code && <span> • Code: <strong>{rider.rider_code}</strong></span>}
+            </div>
+          </div>
+        </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {actions}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="finance-dashboard">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>Rider Management</h1>
+            <p style={{ color: '#64748B', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+              Approve new rider applications and manage your fleet.
+            </p>
+          </div>
+          <button className="btn btn-primary" onClick={() => setActiveTab('dashboard')}>
+            <MapIcon size={16} /> Back to Live Map
+          </button>
+        </div>
+
+        {/* Pending Riders */}
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+              🟡 Pending Approval
+            </h2>
+            {pendingRiders.length > 0 && (
+              <span style={{
+                background: '#EF4444', color: 'white', borderRadius: '20px',
+                padding: '0.15rem 0.6rem', fontSize: '0.75rem', fontWeight: 700
+              }}>
+                {pendingRiders.length}
+              </span>
+            )}
+          </div>
+          {pendingRiders.length === 0 ? (
+            <div style={{ color: '#94A3B8', fontSize: '0.875rem', padding: '1rem', background: 'white', borderRadius: '10px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+              No pending applications.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {pendingRiders.map(rider => (
+                <RiderCard key={rider.id} rider={rider} actions={<>
+                  <button
+                    onClick={() => handleApprove(rider)}
+                    style={{ padding: '0.5rem 1rem', background: '#10B981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    onClick={() => handleReject(rider)}
+                    style={{ padding: '0.5rem 1rem', background: '#EF4444', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    ✕ Reject
+                  </button>
+                </>} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Active Riders */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', marginBottom: '1rem' }}>
+            🟢 Active Riders ({activeRidersList.length})
+          </h2>
+          {activeRidersList.length === 0 ? (
+            <div style={{ color: '#94A3B8', fontSize: '0.875rem', padding: '1rem', background: 'white', borderRadius: '10px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+              No active riders yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {activeRidersList.map(rider => (
+                <RiderCard key={rider.id} rider={rider} actions={<>
+                  <button
+                    onClick={() => handleEditRiderCode(rider)}
+                    style={{ padding: '0.5rem 1rem', background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    ✎ Edit Code
+                  </button>
+                  <button
+                    onClick={() => handleReject(rider)}
+                    style={{ padding: '0.5rem 1rem', background: 'white', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Deactivate
+                  </button>
+                </>} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Rejected Riders */}
+        {rejectedRiders.length > 0 && (
+          <div>
+            <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', marginBottom: '1rem' }}>
+              🔴 Rejected ({rejectedRiders.length})
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {rejectedRiders.map(rider => (
+                <RiderCard key={rider.id} rider={rider} actions={<>
+                  <button
+                    onClick={() => handleReApprove(rider)}
+                    style={{ padding: '0.5rem 1rem', background: '#10B981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Re-Approve
+                  </button>
+                </>} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── Manage Roles Tab (Superadmin Only) ──────────────────────────────────
   if (activeTab === 'roles' && userRole === 'superadmin') {
     const ridersList = Object.values(riders);
+
     return (
       <div className="finance-dashboard">
         {/* Superadmin Banner */}
@@ -1961,12 +2194,38 @@ export default function CEOAdminPanel({ userRole }) {
           <button className="floating-finance-btn" style={{ position: 'relative', top: 'auto', right: 'auto' }} onClick={() => setActiveTab('finance')}>
             <LayoutDashboard size={16} /> Finance Dashboard
           </button>
+          <button
+            className="floating-finance-btn"
+            style={{ position: 'relative', top: 'auto', right: 'auto', background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}
+            onClick={() => setActiveTab('riders')}
+          >
+            <Users size={16} /> Riders
+            {(() => {
+              const pending = Object.values(riders).filter(r => r.approval_status === 'pending_approval').length;
+              return pending > 0 ? (
+                <span style={{
+                  marginLeft: '4px',
+                  background: '#EF4444',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>{pending}</span>
+              ) : null;
+            })()}
+          </button>
           {userRole === 'superadmin' && (
             <button className="floating-finance-btn" style={{ position: 'relative', top: 'auto', right: 'auto', background: 'linear-gradient(135deg, #F59E0B, #D97706)' }} onClick={() => setActiveTab('roles')}>
               <Users size={16} /> Manage Roles
             </button>
           )}
         </div>
+
 
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
