@@ -118,7 +118,13 @@ const formatKenyanPhone = (phone) => {
 };
 
 export default function RiderApp({ riderCode, session, userRole, riderProfile }) {
-  const [rider, setRider] = useState({ status: 'offline', orders_completed: 0, earnings: 0 });
+  // Initialize rider state with riderProfile if available
+  const [rider, setRider] = useState(() => {
+    if (userRole === 'rider' && riderProfile?.id) {
+      return riderProfile;
+    }
+    return { status: 'offline', orders_completed: 0, earnings: 0 };
+  });
   const [activeOrder, setActiveOrder] = useState(null);
   const [isAssignedToMe, setIsAssignedToMe] = useState(false);
   const [historicalOrders, setHistoricalOrders] = useState([]);
@@ -146,6 +152,13 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
   const isOnline = rider.status !== 'offline';
   const isBusy = rider.status === 'busy';
 
+  // Keep rider state synced when riderProfile prop updates
+  useEffect(() => {
+    if (userRole === 'rider' && riderProfile?.id) {
+      setRider(prev => ({ ...prev, ...riderProfile }));
+    }
+  }, [riderProfile, userRole]);
+
   // Toggle Sound Preference
   const toggleSound = () => {
     setSoundEnabled(prev => {
@@ -156,27 +169,32 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
   };
 
   // 1. Fetch Initial Rider Profile & Historical Orders
+  // STRICT ISOLATION: A regular rider can ONLY EVER load their own account (auth_user_id)
   const fetchRiderData = async () => {
     let riderData = null;
 
-    // If regular rider with an active session, strictly lock to their authenticated account
-    if (userRole === 'rider' && session?.user?.id) {
+    if (userRole === 'rider') {
+      // Regular rider: strictly query by authenticated user ID ONLY
+      if (!session?.user?.id) return;
       const { data } = await supabase
         .from('riders')
         .select('*')
         .eq('auth_user_id', session.user.id)
-        .maybeSingle();
-      riderData = data;
-    }
+        .order('created_at', { ascending: false });
 
-    // If CEO / SuperAdmin or fallback, query by riderCode
-    if (!riderData && riderCode) {
-      const { data } = await supabase
-        .from('riders')
-        .select('*')
-        .eq('rider_code', riderCode)
-        .maybeSingle();
-      riderData = data;
+      if (data && data.length > 0) {
+        riderData = data[0];
+      }
+    } else if (userRole === 'ceo' || userRole === 'superadmin') {
+      // CEO or SuperAdmin monitoring the fleet: query by the selected riderCode
+      if (riderCode) {
+        const { data } = await supabase
+          .from('riders')
+          .select('*')
+          .eq('rider_code', riderCode)
+          .maybeSingle();
+        riderData = data;
+      }
     }
 
     if (riderData) {
@@ -191,6 +209,7 @@ export default function RiderApp({ riderCode, session, userRole, riderProfile })
       if (ordersData) setHistoricalOrders(ordersData);
     }
   };
+
 
   useEffect(() => {
     fetchRiderData();

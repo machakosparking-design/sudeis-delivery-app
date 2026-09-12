@@ -459,7 +459,7 @@ export default function App() {
           <CEOAdminPanel userRole={userRole} />
         ) : (
           <RiderApp 
-            riderCode={currentRole} 
+            riderCode={userRole === 'rider' ? (userRiderProfile?.rider_code || 'rider') : currentRole} 
             session={session} 
             userRole={userRole} 
             riderProfile={userRiderProfile} 
