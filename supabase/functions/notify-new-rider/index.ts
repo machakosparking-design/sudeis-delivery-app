@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const CEO_EMAIL = Deno.env.get("CEO_EMAIL");
@@ -55,6 +55,16 @@ serve(async (req: Request) => {
 
   if (!CEO_EMAIL) {
     console.error("CEO_EMAIL environment variable is not set.");
+    return new Response("Server configuration error", { status: 500 });
+  }
+
+  // Parse one or multiple comma-separated emails
+  const recipients = CEO_EMAIL.split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+
+  if (recipients.length === 0) {
+    console.error("No valid recipient emails found in CEO_EMAIL.");
     return new Response("Server configuration error", { status: 500 });
   }
 
@@ -171,7 +181,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         from: FROM_EMAIL,
-        to: [CEO_EMAIL],
+        to: recipients,
         subject: `🦅 New Rider Application — ${riderName}`,
         html: emailHtml,
       }),
