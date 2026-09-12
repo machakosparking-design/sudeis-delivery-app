@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const CEO_EMAIL = Deno.env.get("CEO_EMAIL");
-const FROM_EMAIL = "Falcon Delivery <notifications@falcondelivery.co.ke>";
+const FROM_EMAIL = "Falcon Delivery <notifications@email.falcondelivery.co.ke>";
 
 serve(async (req: Request) => {
   // Only allow POST
