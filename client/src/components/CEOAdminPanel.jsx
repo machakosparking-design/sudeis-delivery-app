@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { 
   Send, MapPin, Package, Smartphone, DollarSign, Activity, Users, 
@@ -81,9 +81,36 @@ function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, s
   return null;
 }
 
+// Map pan/zoom controller for smooth flying to rider locations
+function MapFlyController({ targetCoords, zoom = 16 }) {
+  const map = useMap();
+  useEffect(() => {
+    if (targetCoords && targetCoords[0] != null && targetCoords[1] != null) {
+      map.flyTo([targetCoords[0], targetCoords[1]], zoom, {
+        animate: true,
+        duration: 1.5,
+        easeLinearity: 0.25
+      });
+    }
+  }, [targetCoords, zoom, map]);
+  return null;
+}
+
 export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTabChange }) {
   const [riders, setRiders] = useState({});
   const [orders, setOrders] = useState([]);
+  const [focusCoords, setFocusCoords] = useState(null);
+  const [selectedRiderId, setSelectedRiderId] = useState(null);
+
+  const handleFocusRider = (rider) => {
+    if (!rider.current_lat || !rider.current_lng) {
+      alert(`${rider.name || 'This rider'} has not broadcasted their GPS location yet or is currently offline.`);
+      return;
+    }
+    setActiveTab('dashboard');
+    setFocusCoords([rider.current_lat, rider.current_lng, Date.now()]);
+    setSelectedRiderId(rider.id);
+  };
   
   // Single Order Form State
   const [formData, setFormData] = useState({ 
@@ -947,6 +974,13 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {activeRidersList.map(rider => (
                 <RiderCard key={rider.id} rider={rider} actions={<>
+                  <button
+                    onClick={() => handleFocusRider(rider)}
+                    style={{ padding: '0.5rem 0.85rem', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    title="Pan map to rider's live location"
+                  >
+                    <MapPin size={14} /> Track on Map
+                  </button>
                   <button
                     onClick={() => handleEditRiderCode(rider)}
                     style={{ padding: '0.5rem 1rem', background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
@@ -2231,9 +2265,68 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
           )}
         </div>
 
+        {/* Quick Fleet Pan Bar: Click any courier to fly directly to their live GPS location */}
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          zIndex: 1000,
+          display: 'flex',
+          gap: '0.45rem',
+          overflowX: 'auto',
+          maxWidth: 'calc(100% - 140px)',
+          padding: '2px',
+          scrollbarWidth: 'none'
+        }}>
+          {Object.values(riders).filter(r => r.role === 'rider' && r.approval_status === 'active').map(r => (
+            <button
+              key={r.id}
+              onClick={() => handleFocusRider(r)}
+              style={{
+                background: selectedRiderId === r.id ? '#2563EB' : 'rgba(15, 23, 42, 0.85)',
+                backdropFilter: 'blur(8px)',
+                color: 'white',
+                border: selectedRiderId === r.id ? '2px solid #93C5FD' : '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '20px',
+                padding: '0.3rem 0.75rem',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                transition: 'all 0.15s ease'
+              }}
+              title={`Click to fly map to ${r.name}'s location`}
+            >
+              <span style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: r.status === 'online' ? '#10B981' : r.status === 'busy' ? '#F59E0B' : '#64748B'
+              }} />
+              <span>{r.name}</span>
+              {r.current_lat && <MapPin size={12} color="#38BDF8" />}
+            </button>
+          ))}
+        </div>
 
         <MapContainer center={nairobiCenter} zoom={13} style={{ height: '100%', width: '100%', cursor: mapClickMode ? 'crosshair' : 'grab' }}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          
+          {/* Smooth camera pan to focused rider */}
+          <MapFlyController targetCoords={focusCoords ? [focusCoords[0], focusCoords[1]] : null} zoom={16} />
+
+          {/* Highlight ring around selected rider */}
+          {selectedRiderId && riders[selectedRiderId]?.current_lat && (
+            <Circle
+              center={[riders[selectedRiderId].current_lat, riders[selectedRiderId].current_lng]}
+              radius={100}
+              pathOptions={{ color: '#2563EB', fillColor: '#3B82F6', fillOpacity: 0.35, weight: 2 }}
+            />
+          )}
           
           <MapInteraction 
             mode={mapClickMode} 
