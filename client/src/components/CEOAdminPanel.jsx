@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { 
@@ -43,12 +43,29 @@ const createRiderIcon = (rider, isSelected = false) => {
   return L.divIcon({
     className: 'custom-rider-pin',
     html: `
-      <div style="display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%); cursor: pointer;">
         <div style="
-          position: relative;
-          background: ${statusColor};
+          background: #0F172A;
+          color: #FFFFFF;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 12px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+          white-space: nowrap;
+          margin-bottom: 2px;
+          border: 1px solid rgba(255,255,255,0.25);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        ">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; display: inline-block;"></span>
+          ${cleanName}
+        </div>
+        <div style="
           width: 32px;
           height: 32px;
+          background: ${statusColor};
           border-radius: 50% 50% 50% 0;
           transform: rotate(-45deg);
           border: ${borderRing};
@@ -56,23 +73,9 @@ const createRiderIcon = (rider, isSelected = false) => {
           display: flex;
           align-items: center;
           justify-content: center;
+          transition: all 0.2s ease;
         ">
-          <span style="transform: rotate(45deg); font-size: 14px; line-height: 1;">🏍️</span>
-        </div>
-        <div style="
-          background: ${isSelected ? '#1D4ED8' : 'rgba(15, 23, 42, 0.9)'};
-          color: #FFFFFF;
-          font-size: 10px;
-          font-weight: 700;
-          padding: 2px 7px;
-          border-radius: 10px;
-          margin-top: 4px;
-          white-space: nowrap;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-          border: 1px solid rgba(255,255,255,0.25);
-          letter-spacing: 0.3px;
-        ">
-          ${cleanName}
+          <span style="transform: rotate(45deg); font-size: 15px;">🏍️</span>
         </div>
       </div>
     `,
@@ -81,10 +84,13 @@ const createRiderIcon = (rider, isSelected = false) => {
   });
 };
 
-function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, setMode }) {
+function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, setMode, onMapClick }) {
   useMapEvents({
     click: async (e) => {
-      if (!mode) return; 
+      if (!mode) {
+        if (onMapClick) onMapClick(e);
+        return;
+      }
       const { lat, lng } = e.latlng;
       
       try {
@@ -120,17 +126,46 @@ function MapInteraction({ mode, setFormData, setBatchPickupData, dispatchMode, s
 }
 
 // Map pan/zoom controller for smooth flying to rider locations (snappy 1.2s glide at zoom 15.5)
-function MapFlyController({ targetCoords, zoom = 15.5 }) {
+function MapFlyController({ targetCoords, zoom = 15.5, onComplete }) {
   const map = useMap();
+  const lastFlownRef = useRef(null);
+
   useEffect(() => {
-    if (targetCoords && targetCoords[0] != null && targetCoords[1] != null) {
-      map.flyTo([targetCoords[0], targetCoords[1]], zoom, {
-        animate: true,
-        duration: 1.2,
-        easeLinearity: 0.35
-      });
+    if (!targetCoords || targetCoords[0] == null || targetCoords[1] == null) {
+      return;
     }
-  }, [targetCoords, zoom, map]);
+
+    const key = `${targetCoords[0].toFixed(5)},${targetCoords[1].toFixed(5)},${targetCoords[2] || ''}`;
+    if (lastFlownRef.current === key) {
+      return;
+    }
+    lastFlownRef.current = key;
+
+    map.flyTo([targetCoords[0], targetCoords[1]], zoom, {
+      animate: true,
+      duration: 1.2,
+      easeLinearity: 0.35
+    });
+
+    const timer = setTimeout(() => {
+      if (onComplete) onComplete();
+    }, 1250);
+
+    return () => clearTimeout(timer);
+  }, [targetCoords, zoom, map, onComplete]);
+
+  // Release camera control immediately if the user interacts with the map
+  useMapEvents({
+    dragstart: () => {
+      map.stop();
+      if (onComplete) onComplete();
+    },
+    zoomstart: () => {
+      map.stop();
+      if (onComplete) onComplete();
+    }
+  });
+
   return null;
 }
 
@@ -142,6 +177,14 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
 
   const handleFocusRider = async (rider) => {
     if (!rider) return;
+
+    // Toggle off if already selected
+    if (selectedRiderId === rider.id) {
+      setSelectedRiderId(null);
+      setFocusCoords(null);
+      return;
+    }
+
     const currentRider = riders[rider.id] || rider;
     let lat = currentRider.current_lat;
     let lng = currentRider.current_lng;
@@ -1049,10 +1092,26 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
                 <RiderCard key={rider.id} rider={rider} actions={<>
                   <button
                     onClick={() => handleFocusRider(rider)}
-                    style={{ padding: '0.5rem 0.85rem', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    title="Pan map to rider's live location"
+                    style={{
+                      padding: '0.5rem 0.85rem',
+                      background: selectedRiderId === rider.id ? '#DC2626' : '#2563EB',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title={selectedRiderId === rider.id ? "Stop tracking rider" : "Pan map to rider's live location"}
                   >
-                    <MapPin size={14} /> Track on Map
+                    {selectedRiderId === rider.id ? (
+                      <><X size={14} /> Stop Tracking</>
+                    ) : (
+                      <><MapPin size={14} /> Track on Map</>
+                    )}
                   </button>
                   <button
                     onClick={() => handleEditRiderCode(rider)}
@@ -2404,15 +2463,20 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
             updateWhenIdle={true}
           />
           
-          {/* Smooth camera pan to focused rider */}
-          <MapFlyController targetCoords={focusCoords ? [focusCoords[0], focusCoords[1]] : null} zoom={15.5} />
+          {/* Smooth camera pan to focused rider (flies once, stops looping, auto-clears onComplete) */}
+          <MapFlyController 
+            targetCoords={focusCoords} 
+            zoom={15.5} 
+            onComplete={() => setFocusCoords(null)} 
+          />
 
-          {/* Highlight ring around selected rider */}
+          {/* Highlight ring around selected rider - interactive={false} so clicks pass straight through */}
           {selectedRiderId && riders[selectedRiderId]?.current_lat && (
             <Circle
               center={[riders[selectedRiderId].current_lat, riders[selectedRiderId].current_lng]}
               radius={120}
-              pathOptions={{ color: '#2563EB', fillColor: '#3B82F6', fillOpacity: 0.25, weight: 2 }}
+              interactive={false}
+              pathOptions={{ color: '#2563EB', fillColor: '#3B82F6', fillOpacity: 0.25, weight: 2, interactive: false }}
             />
           )}
 
@@ -2424,11 +2488,13 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
                   [selectedRider.current_lat, selectedRider.current_lng],
                   [selectedRiderActiveOrder.dropoff_lat, selectedRiderActiveOrder.dropoff_lng]
                 ]}
+                interactive={false}
                 pathOptions={{
                   color: '#2563EB',
                   weight: 4,
                   dashArray: '8, 8',
-                  opacity: 0.85
+                  opacity: 0.85,
+                  interactive: false
                 }}
               />
               <Marker position={[selectedRiderActiveOrder.dropoff_lat, selectedRiderActiveOrder.dropoff_lng]}>
@@ -2447,6 +2513,9 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
             setBatchPickupData={setBatchPickupData} 
             dispatchMode={dispatchMode} 
             setMode={setMapClickMode} 
+            onMapClick={() => {
+              setFocusCoords(null);
+            }}
           />
 
           {dispatchMode === 'single' && formData.pickupLat && (
@@ -2475,7 +2544,14 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
                   position={[rider.current_lat, rider.current_lng]} 
                   icon={createRiderIcon(rider, isSelected)}
                   eventHandlers={{
-                    click: () => handleFocusRider(rider),
+                    click: () => {
+                      if (selectedRiderId === rider.id) {
+                        setSelectedRiderId(null);
+                        setFocusCoords(null);
+                      } else {
+                        handleFocusRider(rider);
+                      }
+                    },
                   }}
                 >
                   <Popup>
@@ -2673,7 +2749,34 @@ export default function CEOAdminPanel({ userRole, activeTab: propActiveTab, onTa
               )}
 
               <button
-                onClick={() => handleFocusRider(selectedRider)}
+                onClick={() => {
+                  setSelectedRiderId(null);
+                  setFocusCoords(null);
+                }}
+                style={{
+                  padding: '0.55rem 0.8rem',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '10px',
+                  color: '#DC2626',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+                title="Stop Tracking & Deselect Rider"
+              >
+                <X size={14} /> Stop
+              </button>
+
+              <button
+                onClick={() => {
+                  if (selectedRider?.current_lat) {
+                    setFocusCoords([selectedRider.current_lat, selectedRider.current_lng, Date.now()]);
+                  }
+                }}
                 style={{
                   padding: '0.55rem 0.8rem',
                   background: '#EFF6FF',
