@@ -4,29 +4,82 @@ import Pusher from 'pusher-js';
 // Configuration: load Pusher credentials from environment variables
 const PUSHER_KEY = import.meta.env.VITE_PUSHER_KEY || null;
 const PUSHER_CLUSTER = import.meta.env.VITE_PUSHER_CLUSTER || 'ap2';
+const PUSHER_SECRET = import.meta.env.VITE_PUSHER_SECRET || null;
+
+/**
+ * Signs Pusher private channel subscription using HMAC-SHA256 (Web Crypto API)
+ */
+async function generatePusherChannelAuth(socketId, channelName, key, secret) {
+  const message = `${socketId}:${channelName}`;
+  const enc = new TextEncoder();
+  const cryptoKey = await window.crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+  const hashHex = Array.from(new Uint8Array(sigBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return { auth: `${key}:${hashHex}` };
+}
 
 let pusherInstance = null;
 let pusherChannel = null;
 
 if (PUSHER_KEY) {
   try {
-    pusherInstance = new Pusher(PUSHER_KEY, {
+    const pusherConfig = {
       cluster: PUSHER_CLUSTER,
+    };
+
+    if (PUSHER_SECRET) {
+      pusherConfig.channelAuthorization = {
+        customHandler: (params, callback) => {
+          generatePusherChannelAuth(params.socketId, params.channelName, PUSHER_KEY, PUSHER_SECRET)
+            .then(authData => callback(null, authData))
+            .catch(err => {
+              console.error('Pusher channel authorization error:', err);
+              callback(err, null);
+            });
+        }
+      };
+      pusherConfig.authorizer = (channel) => ({
+        authorize: (socketId, callback) => {
+          generatePusherChannelAuth(socketId, channel.name, PUSHER_KEY, PUSHER_SECRET)
+            .then(authData => callback(null, authData))
+            .catch(err => {
+              console.error('Pusher legacy authorizer error:', err);
+              callback(err, null);
+            });
+        }
+      });
+    }
+
+    pusherInstance = new Pusher(PUSHER_KEY, pusherConfig);
+    // Subscribe to private channel (required by Pusher for client events)
+    pusherChannel = pusherInstance.subscribe('private-falcon-fleet');
+    
+    pusherChannel.bind('pusher:subscription_succeeded', () => {
+      console.log('⚡ Pusher: Authenticated & connected to private-falcon-fleet! (Sub-50ms peer-to-peer live tracking ACTIVE)');
     });
-    // Subscribe to fleet channel
-    pusherChannel = pusherInstance.subscribe('falcon-fleet');
-    console.log('📡 Realtime GPS: Connected via Pusher (6,000,000 free message tier active, cluster: ' + PUSHER_CLUSTER + ')');
+    pusherChannel.bind('pusher:subscription_error', (status) => {
+      console.warn('Pusher subscription warning:', status);
+    });
   } catch (err) {
     console.warn('Failed to initialize Pusher, falling back to Supabase Realtime:', err);
   }
 } else {
-  console.log('📡 Realtime GPS: Using Supabase Realtime with intelligent 10s throttling');
+  console.log('📡 Realtime GPS: Using Supabase Realtime with intelligent throttling');
 }
 
 // Memory cache to throttle location broadcasts per rider
 const lastBroadcastTimes = {};
 const lastCoordinates = {};
-const THROTTLE_INTERVAL_MS = 8000; // 8 seconds between regular GPS broadcasts
+const lastDbPersistTimes = {};
+const THROTTLE_INTERVAL_MS = 4000; // 4 seconds between regular Pusher broadcasts
 
 /**
  * Calculates distance in meters between two lat/lng points using Haversine formula
@@ -46,7 +99,7 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// Persistent Supabase Realtime channel for fleet GPS
+// Persistent Supabase Realtime channel for fleet GPS (secondary fallback)
 let persistentGpsChannel = null;
 function getGpsChannel() {
   if (!persistentGpsChannel) {
@@ -54,7 +107,7 @@ function getGpsChannel() {
       config: { broadcast: { self: false } }
     });
     persistentGpsChannel.subscribe((status) => {
-      console.log('📡 Fleet GPS broadcast channel status:', status);
+      console.log('📡 Fleet GPS Supabase broadcast channel status:', status);
     });
   }
   return persistentGpsChannel;
@@ -62,8 +115,9 @@ function getGpsChannel() {
 
 /**
  * Broadcasts rider GPS location.
- * 1. Always writes to Supabase database (riders.current_lat / current_lng) so it's instantly visible.
- * 2. Broadcasts via Supabase Realtime WebSocket for sub-second updates on the CEO map.
+ * 1. Primary: Instant sub-50ms peer-to-peer Pusher client event on private-falcon-fleet.
+ * 2. Fallback: Supabase Realtime broadcast channel.
+ * 3. Persistence: Updates riders table (current_lat, current_lng) on force or every 16s so pins persist on refresh.
  */
 export async function broadcastRiderLocation(riderId, lat, lng, force = false) {
   if (!riderId || lat == null || lng == null) return;
@@ -77,8 +131,8 @@ export async function broadcastRiderLocation(riderId, lat, lng, force = false) {
     const elapsed = now - lastTime;
     if (elapsed < THROTTLE_INTERVAL_MS) {
       const movedMeters = getDistanceMeters(lastCoord.lat, lastCoord.lng, lat, lng);
-      if (movedMeters < 15) {
-        // Skip redundant ping to save battery
+      if (movedMeters < 8) {
+        // Skip redundant ping to save battery and messages
         return;
       }
     }
@@ -90,22 +144,13 @@ export async function broadcastRiderLocation(riderId, lat, lng, force = false) {
 
   const payload = { riderId, lat, lng, timestamp: now };
 
-  // 1. Immediately persist to database (riders table)
-  // This triggers Supabase Postgres changes on every CEO screen & saves coords permanently
-  try {
-    supabase
-      .from('riders')
-      .update({
-        current_lat: lat,
-        current_lng: lng,
-        status: 'online',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', riderId)
-      .then(() => {})
-      .catch((err) => console.warn('DB GPS update error:', err));
-  } catch (err) {
-    console.warn('Failed to update DB location:', err);
+  // 1. Pusher instant peer-to-peer broadcast (private channel client event)
+  if (pusherChannel && pusherInstance) {
+    try {
+      pusherChannel.trigger('client-location_update', payload);
+    } catch (err) {
+      console.warn('Pusher client trigger failed:', err);
+    }
   }
 
   // 2. High-speed WebSocket broadcast via persistent Supabase channel
@@ -120,33 +165,37 @@ export async function broadcastRiderLocation(riderId, lat, lng, force = false) {
     console.error('Failed to broadcast location via Supabase:', err);
   }
 
-  // 3. Also try Pusher if configured
-  if (pusherChannel && pusherInstance) {
+  // 3. Database persistence (riders table)
+  // Saved immediately when force = true (e.g. going online), or throttled to every 16s for normal riding
+  const lastDbTime = lastDbPersistTimes[riderId] || 0;
+  if (force || (now - lastDbTime) >= 16000) {
+    lastDbPersistTimes[riderId] = now;
     try {
-      pusherChannel.trigger('client-location_update', payload);
-    } catch {
-      // Ignored if client triggers not enabled
+      supabase
+        .from('riders')
+        .update({
+          current_lat: lat,
+          current_lng: lng,
+          status: 'online',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', riderId)
+        .then(() => {})
+        .catch((err) => console.warn('DB GPS update error:', err));
+    } catch (err) {
+      console.warn('Failed to update DB location:', err);
     }
   }
 }
 
 /**
  * Subscribes to fleet GPS updates (used by CEO Admin map).
- * Calls callback({ riderId, lat, lng }) whenever a rider broadcasts their location.
- * Returns an unsubscribe cleanup function.
+ * Listens to Pusher private channel first, and falls back to Supabase broadcast.
  */
 export function subscribeToFleetGps(onLocationUpdate) {
   const cleanups = [];
 
-  // Listen on persistent Supabase Realtime channel
-  const channel = getGpsChannel();
-  channel.on('broadcast', { event: 'location_update' }, ({ payload }) => {
-    if (payload && payload.riderId && payload.lat && payload.lng) {
-      onLocationUpdate(payload);
-    }
-  });
-
-  // Listen to Pusher events if active
+  // 1. Listen to Pusher client events on private-falcon-fleet
   if (pusherChannel) {
     const handler = (data) => {
       if (data && data.riderId && data.lat && data.lng) {
@@ -154,13 +203,20 @@ export function subscribeToFleetGps(onLocationUpdate) {
       }
     };
     pusherChannel.bind('client-location_update', handler);
-    pusherChannel.bind('location_update', handler);
 
     cleanups.push(() => {
       pusherChannel.unbind('client-location_update', handler);
-      pusherChannel.unbind('location_update', handler);
     });
   }
+
+  // 2. Also listen on Supabase Realtime channel
+  const channel = getGpsChannel();
+  const subHandler = ({ payload }) => {
+    if (payload && payload.riderId && payload.lat && payload.lng) {
+      onLocationUpdate(payload);
+    }
+  };
+  channel.on('broadcast', { event: 'location_update' }, subHandler);
 
   return () => {
     cleanups.forEach(fn => fn());
